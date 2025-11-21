@@ -29,7 +29,9 @@ const App: React.FC = () => {
             pipelines: parsed.pipelines || INITIAL_DATA.pipelines,
             defaultPipelineId: parsed.defaultPipelineId || INITIAL_DATA.defaultPipelineId,
             evolutionConfig: parsed.evolutionConfig || INITIAL_DATA.evolutionConfig,
-            automations: parsed.automations || INITIAL_DATA.automations
+            automations: parsed.automations || INITIAL_DATA.automations,
+            // Ensure classes have schedule array if loading form old data
+            classes: parsed.classes?.map((c: any) => ({ ...c, schedule: c.schedule || [] })) || INITIAL_DATA.classes
         }; 
       } catch (e) {
         console.error("Failed to parse saved data", e);
@@ -243,6 +245,19 @@ const App: React.FC = () => {
     setData(prev => ({ ...prev, classes: updatedClasses, students: updatedStudents }));
   };
 
+  const handleUnenrollStudent = (studentId: string, classId: string) => {
+      const updatedClasses = data.classes.map(c => {
+          if (c.id === classId) {
+              return { ...c, enrolledStudentIds: c.enrolledStudentIds.filter(id => id !== studentId) };
+          }
+          return c;
+      });
+      // Note: We don't remove history or revert status automatically to preserve financial records
+      // unless explicitly requested.
+      setData(prev => ({ ...prev, classes: updatedClasses }));
+      addToast('Aluna removida da turma.', 'info');
+  };
+
   if (currentView === 'public-form') {
       const { formConfig } = data;
       return (
@@ -359,6 +374,8 @@ const App: React.FC = () => {
             onUpdateCourse={handleUpdateCourse}
             onAddClass={handleAddClass}
             onShowToast={addToast}
+            onEnrollStudent={handleEnrollStudent}
+            onUnenrollStudent={handleUnenrollStudent}
           />
         )}
         

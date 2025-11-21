@@ -39,15 +39,15 @@ export const INITIAL_DATA: AppState = {
   ],
   defaultPipelineId: SYSTEM_PIPELINE_ID,
   courses: [
-    { id: 'c1', name: 'Micropigmentação de Sobrancelhas', price: 1500, duration: '3 Dias', description: 'Técnicas de shadow e fio a fio.' },
+    { id: 'c1', name: 'Micropigmentação de Sobrancelhas', price: 1500, duration: '30 Horas', description: 'Técnicas de shadow e fio a fio.' },
     { id: 'c2', name: 'Design de Sobrancelhas com Henna', price: 450, duration: '1 Dia', description: 'Mapeamento facial e aplicação.' },
     { id: 'c3', name: 'Limpeza de Pele Profunda', price: 800, duration: '2 Dias', description: 'Extração, peeling ultrassônico e máscaras.' },
-    { id: 'c4', name: 'Extensão de Cílios (Lash)', price: 1200, duration: '2 Dias', description: 'Técnicas clássica e volume russo.' },
+    { id: 'c4', name: 'Extensão de Cílios (Lash)', price: 1200, duration: '16 Horas', description: 'Técnicas clássica e volume russo.' },
   ],
   classes: [
     { 
-      id: 't1', courseId: 'c1', startDate: '2023-11-10', endDate: '2023-11-13', 
-      schedule: ['2023-11-10', '2023-11-11', '2023-11-12', '2023-11-13'],
+      id: 't1', courseId: 'c1', startDate: '2023-11-10', endDate: '2023-11-17', 
+      schedule: ['2023-11-10', '2023-11-13', '2023-11-15', '2023-11-17'], // Seg, Qua, Sex logic example
       maxStudents: 4, enrolledStudentIds: ['s1'], status: 'open' 
     },
     { 

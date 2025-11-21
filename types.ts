@@ -18,7 +18,7 @@ export interface CourseClass {
   courseId: string;
   startDate: string;
   endDate?: string;
-  schedule?: string[];
+  schedule?: string[]; // Array of ISO date strings for specific class days
   maxStudents: number;
   enrolledStudentIds: string[];
   status: 'open' | 'ongoing' | 'completed';

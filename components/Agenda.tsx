@@ -40,36 +40,49 @@ const Agenda: React.FC<AgendaProps> = ({ classes, students, courses }) => {
       return new Date(y, m - 1, d);
     };
 
-    // Add Classes with Duration Logic
+    // Add Classes
     classes.forEach(c => {
       const course = courses.find(course => course.id === c.courseId);
-      
-      const startDate = parseDate(c.startDate);
-      const endDate = c.endDate ? parseDate(c.endDate) : startDate;
       const colorClass = getCourseColor(c.courseId);
 
-      const loopDate = new Date(startDate);
-      let dayCounter = 0;
-      
-      // Iterate from start to end date
-      while (loopDate <= endDate) {
-        const dateStr = loopDate.toISOString().split('T')[0];
+      if (c.schedule && c.schedule.length > 0) {
+          // New Logic: specific dates
+          c.schedule.forEach((dateStr, idx) => {
+              items.push({
+                  date: dateStr,
+                  type: 'class',
+                  title: course?.name || 'Turma',
+                  id: `${c.id}-${dateStr}`,
+                  details: `${c.enrolledStudentIds.length}/${c.maxStudents} alunas`,
+                  colorClass: colorClass,
+                  isStart: idx === 0,
+                  isEnd: idx === c.schedule!.length - 1
+              });
+          });
+      } else {
+        // Fallback Logic: Range
+        const startDate = parseDate(c.startDate);
+        const endDate = c.endDate ? parseDate(c.endDate) : startDate;
         
-        items.push({
-          date: dateStr,
-          type: 'class',
-          title: course?.name || 'Turma',
-          id: `${c.id}`, 
-          details: `${c.enrolledStudentIds.length}/${c.maxStudents}`,
-          colorClass: colorClass,
-          isStart: dayCounter === 0,
-          isEnd: loopDate.getTime() === endDate.getTime(),
-          dayIndex: dayCounter
-        });
-
-        // Next day
-        loopDate.setDate(loopDate.getDate() + 1);
-        dayCounter++;
+        const loopDate = new Date(startDate);
+        let dayCounter = 0;
+        
+        while (loopDate <= endDate) {
+            const dateStr = loopDate.toISOString().split('T')[0];
+            items.push({
+            date: dateStr,
+            type: 'class',
+            title: course?.name || 'Turma',
+            id: `${c.id}-${dateStr}`, 
+            details: `${c.enrolledStudentIds.length}/${c.maxStudents}`,
+            colorClass: colorClass,
+            isStart: dayCounter === 0,
+            isEnd: loopDate.getTime() === endDate.getTime(),
+            dayIndex: dayCounter
+            });
+            loopDate.setDate(loopDate.getDate() + 1);
+            dayCounter++;
+        }
       }
     });
 
@@ -154,7 +167,6 @@ const Agenda: React.FC<AgendaProps> = ({ classes, students, courses }) => {
                       `}
                       title={`${ev.title} - ${ev.details}`}
                     >
-                      {/* Logic to show title only on first day or if it's a single day event */}
                       <div className="truncate flex justify-between items-center">
                         <span className="truncate">
                             {ev.type === 'followup' && <User size={10} className="inline mr-1"/>}
@@ -195,8 +207,7 @@ const Agenda: React.FC<AgendaProps> = ({ classes, students, courses }) => {
                           <div>
                              <div className="font-bold text-gray-800 dark:text-dark-text text-sm">{course?.name}</div>
                              <div className="text-xs text-gray-500 dark:text-dark-textMuted">
-                               {new Date(c.startDate).toLocaleDateString('pt-BR')} 
-                               {c.endDate && c.endDate !== c.startDate ? ` até ${new Date(c.endDate).toLocaleDateString('pt-BR')}` : ''}
+                               {c.schedule?.length ? `${c.schedule.length} dias de aula` : 'Datas a definir'}
                              </div>
                           </div>
                        </div>
