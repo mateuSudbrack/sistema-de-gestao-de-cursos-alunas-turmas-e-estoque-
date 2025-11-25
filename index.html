@@ -28,15 +28,29 @@
                 500: '#f59e0b',
               },
               dark: {
-                bg: '#0f172a',
-                surface: '#1e293b',
-                border: '#334155',
-                text: '#f1f5f9',
-                textMuted: '#94a3b8'
+                bg: '#0f172a',      // Slate 900
+                surface: '#1e293b', // Slate 800
+                border: '#334155',  // Slate 700
+                text: '#f8fafc',    // Slate 50
+                textMuted: '#94a3b8' // Slate 400
               }
             },
             fontFamily: {
               sans: ['Inter', 'sans-serif'],
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.5s ease-out',
+              'slide-up': 'slideUp 0.5s ease-out',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              slideUp: {
+                '0%': { transform: 'translateY(10px)', opacity: '0' },
+                '100%': { transform: 'translateY(0)', opacity: '1' },
+              }
             }
           }
         }
@@ -44,15 +58,26 @@
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+      :root {
+        color-scheme: light dark; /* Força inputs nativos a seguirem o tema */
+      }
       body { font-family: 'Inter', sans-serif; }
+      
       /* Custom Scrollbar */
       ::-webkit-scrollbar { width: 6px; height: 6px; }
       ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: #fda4af; border-radius: 3px; }
-      ::-webkit-scrollbar-thumb:hover { background: #f43f5e; }
+      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       
-      .dark ::-webkit-scrollbar-thumb { background: #475569; }
-      .dark ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+      .dark ::-webkit-scrollbar-thumb { background: #334155; }
+      .dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+      /* Remove spinners from number input */
+      input[type=number]::-webkit-inner-spin-button, 
+      input[type=number]::-webkit-outer-spin-button { 
+        -webkit-appearance: none; 
+        margin: 0; 
+      }
     </style>
   <script type="importmap">
 {

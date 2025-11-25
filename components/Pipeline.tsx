@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Student, StudentStatus, Course, PipelineDefinition, PipelineStage } from '../types';
 import { Phone, MessageCircle, GripVertical, Settings, Plus, Trash2, X, Check, Edit2, ArrowLeft } from 'lucide-react';
@@ -219,7 +218,7 @@ const Pipeline: React.FC<PipelineProps> = ({
             placeholder="Buscar aluna..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full md:w-64 pl-4 pr-4 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface text-gray-800 dark:text-dark-text focus:outline-none focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-900"
+            className="w-full md:w-64 pl-4 pr-4 py-2 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text focus:outline-none focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-900"
           />
       </div>
 
@@ -236,7 +235,7 @@ const Pipeline: React.FC<PipelineProps> = ({
                 return (
                     <div 
                         key={stage.id}
-                        className="flex-1 bg-gray-50 dark:bg-white/5 rounded-2xl p-3 flex flex-col h-full border border-gray-100 dark:border-dark-border min-w-[280px]"
+                        className="flex-1 bg-gray-50 dark:bg-slate-800/50 rounded-2xl p-3 flex flex-col h-full border border-gray-100 dark:border-slate-700 min-w-[280px]"
                         onDragOver={handleDragOver}
                         onDrop={(e) => handleDrop(e, stage.id)}
                     >
@@ -276,7 +275,7 @@ const Pipeline: React.FC<PipelineProps> = ({
                     
                     <div className="flex-1 overflow-hidden flex">
                         {/* List of Pipelines */}
-                        <div className="w-1/3 border-r border-gray-100 dark:border-dark-border overflow-y-auto custom-scrollbar bg-gray-50 dark:bg-white/5">
+                        <div className="w-1/3 border-r border-gray-100 dark:border-dark-border overflow-y-auto custom-scrollbar bg-gray-50 dark:bg-slate-800">
                             <button onClick={handleCreatePipeline} className="w-full p-3 flex items-center gap-2 text-primary-600 dark:text-primary-400 font-bold text-sm hover:bg-gray-100 dark:hover:bg-white/10 border-b border-gray-100 dark:border-dark-border">
                                 <Plus size={16}/> Novo Pipeline
                             </button>
@@ -284,7 +283,7 @@ const Pipeline: React.FC<PipelineProps> = ({
                                 <div 
                                     key={p.id} 
                                     onClick={() => !editingPipelineId && handleStartEdit(p)}
-                                    className={`p-3 border-b border-gray-100 dark:border-dark-border cursor-pointer hover:bg-white dark:hover:bg-white/10 transition-colors ${editingPipelineId === p.id ? 'bg-white dark:bg-white/10 border-l-4 border-l-primary-500' : ''}`}
+                                    className={`p-3 border-b border-gray-100 dark:border-dark-border cursor-pointer hover:bg-white dark:hover:bg-white/10 transition-colors ${editingPipelineId === p.id ? 'bg-white dark:bg-slate-700 border-l-4 border-l-primary-500' : ''}`}
                                 >
                                     <div className="font-bold text-gray-800 dark:text-dark-text text-sm">{p.name}</div>
                                     <div className="flex items-center justify-between mt-1">
@@ -304,7 +303,7 @@ const Pipeline: React.FC<PipelineProps> = ({
                                         <div className="flex gap-2">
                                             <input 
                                                 type="text" 
-                                                className="flex-1 p-2 border border-gray-200 dark:border-dark-border rounded-lg bg-white dark:bg-white/5 text-gray-800 dark:text-dark-text"
+                                                className="flex-1 p-2 border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text"
                                                 value={editingPipelineName}
                                                 onChange={e => setEditingPipelineName(e.target.value)}
                                             />
@@ -335,7 +334,7 @@ const Pipeline: React.FC<PipelineProps> = ({
                                         
                                         <div className="space-y-2">
                                             {editingStages.map((stage, idx) => (
-                                                <div key={stage.id} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-white/5 rounded-lg border border-gray-100 dark:border-dark-border">
+                                                <div key={stage.id} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-100 dark:border-slate-700">
                                                     <input 
                                                         type="color" 
                                                         value={stage.color}

@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
-import { EvolutionConfig, Student, AutomationConfig } from '../types';
+import { EvolutionConfig, Student, AutomationConfig, AutomationRule, AutomationTrigger } from '../types';
 import { evolutionService } from '../services/evolutionService';
-import { QrCode, RefreshCw, Send, Users, Zap, MessageCircle } from 'lucide-react';
+import { QrCode, RefreshCw, Send, Users, Zap, MessageCircle, Plus, Trash2 } from 'lucide-react';
 import { ToastType } from './Toast';
 
 interface MessagesProps {
@@ -28,6 +27,11 @@ const Messages: React.FC<MessagesProps> = ({ config, automations, students, onSa
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [bulkMessage, setBulkMessage] = useState('');
   const [bulkFilter, setBulkFilter] = useState('');
+
+  // --- AUTOMATION STATES ---
+  const [newRule, setNewRule] = useState<{name: string, trigger: AutomationTrigger, message: string}>({
+      name: '', trigger: 'lead_created', message: ''
+  });
 
   // --- CONNECT LOGIC ---
   const handleSaveCreds = () => {
@@ -73,6 +77,30 @@ const Messages: React.FC<MessagesProps> = ({ config, automations, students, onSa
         setQrCode(null);
         setLoading(false);
      }
+  };
+
+  // --- AUTOMATION LOGIC ---
+  const handleAddRule = () => {
+      if(!newRule.name || !newRule.message) return onShowToast('Preencha nome e mensagem.', 'error');
+      const rule: AutomationRule = {
+          id: crypto.randomUUID(),
+          name: newRule.name,
+          trigger: newRule.trigger,
+          message: newRule.message,
+          active: true
+      };
+      onSaveAutomations({ ...automations, rules: [...(automations.rules || []), rule] });
+      setNewRule({ name: '', trigger: 'lead_created', message: '' });
+      onShowToast('Regra de automação criada!', 'success');
+  };
+
+  const handleDeleteRule = (id: string) => {
+      onSaveAutomations({ ...automations, rules: automations.rules.filter(r => r.id !== id) });
+  };
+
+  const handleToggleRule = (id: string) => {
+      const updated = automations.rules.map(r => r.id === id ? { ...r, active: !r.active } : r);
+      onSaveAutomations({ ...automations, rules: updated });
   };
 
   // --- BULK LOGIC ---
@@ -145,16 +173,16 @@ const Messages: React.FC<MessagesProps> = ({ config, automations, students, onSa
             {/* TAB: CONNECTION */}
             {activeTab === 'connect' && (
                 <div className="max-w-2xl mx-auto space-y-8">
-                    <div className="bg-gray-50 dark:bg-white/5 p-6 rounded-xl border border-gray-100 dark:border-dark-border">
+                    <div className="bg-gray-50 dark:bg-slate-800 p-6 rounded-xl border border-gray-100 dark:border-slate-700">
                         <h3 className="text-lg font-bold text-gray-800 dark:text-dark-text mb-4">Configuração API Evolution</h3>
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">URL da API</label>
-                                <input type="url" value={apiUrl} onChange={e => setApiUrl(e.target.value)} placeholder="https://api.seusite.com" className="w-full p-3 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface dark:text-dark-text" />
+                                <input type="url" value={apiUrl} onChange={e => setApiUrl(e.target.value)} placeholder="https://api.seusite.com" className="w-full p-3 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 dark:text-dark-text" />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">API Key</label>
-                                <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Sua chave de API Global" className="w-full p-3 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface dark:text-dark-text" />
+                                <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Sua chave de API Global" className="w-full p-3 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 dark:text-dark-text" />
                             </div>
                             <button onClick={handleSaveCreds} className="bg-gray-800 dark:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold">Salvar Credenciais</button>
                         </div>
@@ -165,7 +193,7 @@ const Messages: React.FC<MessagesProps> = ({ config, automations, students, onSa
                         
                         {!config.instanceName ? (
                              <div className="flex gap-3">
-                                 <input type="text" value={instanceName} onChange={e => setInstanceName(e.target.value)} placeholder="Nome da Instância (ex: estetica-pro)" className="flex-1 p-3 rounded-lg border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-white/5 dark:text-dark-text" />
+                                 <input type="text" value={instanceName} onChange={e => setInstanceName(e.target.value)} placeholder="Nome da Instância (ex: estetica-pro)" className="flex-1 p-3 rounded-lg border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 dark:text-dark-text" />
                                  <button onClick={handleCreateInstance} disabled={loading} className="bg-primary-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-primary-700 disabled:opacity-50">
                                      {loading ? 'Criando...' : 'Criar Instância'}
                                  </button>
@@ -197,73 +225,50 @@ const Messages: React.FC<MessagesProps> = ({ config, automations, students, onSa
 
             {/* TAB: AUTOMATIONS */}
             {activeTab === 'automation' && (
-                <div className="max-w-3xl mx-auto space-y-6">
-                    <div className="bg-gray-50 dark:bg-white/5 p-6 rounded-xl border border-gray-100 dark:border-dark-border flex items-start gap-4">
-                        <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg text-green-600 dark:text-green-400">
-                            <MessageCircle size={24}/>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-1 border-r border-gray-100 dark:border-dark-border pr-6 space-y-6">
+                        <h3 className="font-bold text-gray-800 dark:text-dark-text">Nova Regra</h3>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Nome da Regra</label>
+                            <input type="text" value={newRule.name} onChange={e => setNewRule({...newRule, name: e.target.value})} className="w-full p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-600 dark:text-white" placeholder="Ex: Boas Vindas"/>
                         </div>
-                        <div className="flex-1">
-                            <div className="flex justify-between items-center mb-2">
-                                <h3 className="font-bold text-gray-800 dark:text-dark-text">Boas-vindas Automática</h3>
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                    <input type="checkbox" className="sr-only peer" checked={automations.welcomeMessage} onChange={e => onSaveAutomations({...automations, welcomeMessage: e.target.checked})} />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-600"></div>
-                                </label>
-                            </div>
-                            <p className="text-sm text-gray-500 dark:text-dark-textMuted mb-3">Envia uma mensagem assim que você cadastrar uma nova aluna no sistema.</p>
-                            {automations.welcomeMessage && (
-                                <>
-                                    <textarea 
-                                        value={automations.welcomeMessageText}
-                                        onChange={e => onSaveAutomations({...automations, welcomeMessageText: e.target.value})}
-                                        className="w-full p-3 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface text-sm dark:text-dark-text"
-                                        rows={3}
-                                    />
-                                    <p className="text-xs text-primary-600 dark:text-primary-400 mt-1">
-                                        Dica: Use <strong>{'{nome}'}</strong> para o primeiro nome ou <strong>{'{nome_completo}'}</strong> para o nome todo.
-                                    </p>
-                                </>
-                            )}
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Gatilho (Quando...)</label>
+                            <select value={newRule.trigger} onChange={e => setNewRule({...newRule, trigger: e.target.value as AutomationTrigger})} className="w-full p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-600 dark:text-white">
+                                <option value="lead_created">Novo Lead Cadastrado</option>
+                                <option value="enrollment_created">Matrícula Confirmada</option>
+                                <option value="payment_confirmed">Pagamento Recebido</option>
+                            </select>
                         </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Mensagem</label>
+                            <textarea value={newRule.message} onChange={e => setNewRule({...newRule, message: e.target.value})} className="w-full p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-600 dark:text-white" rows={4} placeholder="Olá {nome}..."/>
+                            <p className="text-xs text-primary-500 mt-1">Use <strong>{'{nome}'}</strong> para personalizar.</p>
+                        </div>
+                        <button onClick={handleAddRule} className="w-full bg-primary-600 text-white py-2 rounded-lg font-bold">Criar Automação</button>
                     </div>
 
-                    <div className="bg-gray-50 dark:bg-white/5 p-6 rounded-xl border border-gray-100 dark:border-dark-border flex items-start gap-4">
-                        <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg text-amber-600 dark:text-amber-400">
-                            <RefreshCw size={24}/>
-                        </div>
-                        <div className="flex-1">
-                            <div className="flex justify-between items-center mb-2">
-                                <h3 className="font-bold text-gray-800 dark:text-dark-text">Reengajamento de Inativos</h3>
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                    <input type="checkbox" className="sr-only peer" checked={automations.inactiveFollowUp} onChange={e => onSaveAutomations({...automations, inactiveFollowUp: e.target.checked})} />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                                </label>
-                            </div>
-                            <p className="text-sm text-gray-500 dark:text-dark-textMuted mb-3">Envia mensagem para alunas que não compram há X dias.</p>
-                            {automations.inactiveFollowUp && (
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm dark:text-dark-text">Considerar inativo após</span>
-                                        <input 
-                                            type="number" 
-                                            value={automations.inactiveDays}
-                                            onChange={e => onSaveAutomations({...automations, inactiveDays: parseInt(e.target.value)})}
-                                            className="w-20 p-1 rounded border border-gray-200 dark:border-dark-border text-center bg-white dark:bg-dark-surface dark:text-dark-text"
-                                        />
-                                        <span className="text-sm dark:text-dark-text">dias.</span>
+                    <div className="lg:col-span-2 space-y-4">
+                        <h3 className="font-bold text-gray-800 dark:text-dark-text">Regras Ativas</h3>
+                        {(!automations.rules || automations.rules.length === 0) && <p className="text-gray-400 italic">Nenhuma automação configurada.</p>}
+                        {automations.rules?.map(rule => (
+                            <div key={rule.id} className="bg-gray-50 dark:bg-slate-800 p-4 rounded-xl border border-gray-200 dark:border-slate-700 flex justify-between items-start">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <h4 className="font-bold text-gray-800 dark:text-dark-text">{rule.name}</h4>
+                                        <span className="text-[10px] uppercase bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold">{rule.trigger.replace('_', ' ')}</span>
                                     </div>
-                                    <textarea 
-                                        value={automations.inactiveMessageText}
-                                        onChange={e => onSaveAutomations({...automations, inactiveMessageText: e.target.value})}
-                                        className="w-full p-3 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface text-sm dark:text-dark-text"
-                                        rows={3}
-                                    />
-                                    <p className="text-xs text-primary-600 dark:text-primary-400 mt-1">
-                                        Dica: Use <strong>{'{nome}'}</strong> para substituir pelo nome da aluna.
-                                    </p>
+                                    <p className="text-sm text-gray-600 dark:text-dark-textMuted italic">"{rule.message}"</p>
                                 </div>
-                            )}
-                        </div>
+                                <div className="flex items-center gap-2">
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" className="sr-only peer" checked={rule.active} onChange={() => handleToggleRule(rule.id)} />
+                                        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
+                                    </label>
+                                    <button onClick={() => handleDeleteRule(rule.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}
@@ -274,21 +279,21 @@ const Messages: React.FC<MessagesProps> = ({ config, automations, students, onSa
                     <div className="lg:col-span-1 flex flex-col gap-4 border-r border-gray-100 dark:border-dark-border pr-4">
                         <input 
                             type="text" 
-                            placeholder="Filtrar alunas..." 
+                            placeholder="Filtrar contatos..." 
                             value={bulkFilter}
                             onChange={e => setBulkFilter(e.target.value)}
-                            className="w-full p-3 rounded-xl border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-white/5 dark:text-dark-text"
+                            className="w-full p-3 rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 dark:text-dark-text"
                         />
                         <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-gray-500 dark:text-dark-textMuted">{selectedStudents.length} selecionadas</span>
-                            <button onClick={selectAll} className="text-xs text-primary-600 font-bold hover:underline">Selecionar Todas</button>
+                            <span className="text-xs font-bold text-gray-500 dark:text-dark-textMuted">{selectedStudents.length} selecionados</span>
+                            <button onClick={selectAll} className="text-xs text-primary-600 font-bold hover:underline">Selecionar Todos</button>
                         </div>
                         <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
                             {filteredStudents.map(s => (
                                 <div 
                                     key={s.id} 
                                     onClick={() => toggleSelectStudent(s.id)}
-                                    className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center gap-3 ${selectedStudents.includes(s.id) ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-800' : 'bg-white dark:bg-white/5 border-gray-100 dark:border-dark-border'}`}
+                                    className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center gap-3 ${selectedStudents.includes(s.id) ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-800' : 'bg-white dark:bg-slate-800 border-gray-100 dark:border-slate-700'}`}
                                 >
                                     <div className={`w-4 h-4 rounded border flex items-center justify-center ${selectedStudents.includes(s.id) ? 'bg-primary-500 border-primary-500' : 'border-gray-300'}`}>
                                         {selectedStudents.includes(s.id) && <div className="w-2 h-2 bg-white rounded-full"></div>}
@@ -308,17 +313,17 @@ const Messages: React.FC<MessagesProps> = ({ config, automations, students, onSa
                             value={bulkMessage}
                             onChange={e => setBulkMessage(e.target.value)}
                             placeholder="Digite sua mensagem aqui... Use {nome} para personalizar."
-                            className="flex-1 w-full p-4 rounded-xl border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-white/5 text-gray-800 dark:text-dark-text resize-none focus:ring-2 focus:ring-primary-100 mb-4"
+                            className="flex-1 w-full p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 text-gray-800 dark:text-dark-text resize-none focus:ring-2 focus:ring-primary-100 mb-4"
                          />
                          <div className="flex justify-between items-center bg-blue-50 dark:bg-blue-900/10 p-3 rounded-lg mb-4">
-                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Dica: Use <strong>{'{nome}'}</strong> para substituir pelo nome da aluna automaticamente.</p>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Dica: Use <strong>{'{nome}'}</strong> para substituir pelo nome automaticamente.</p>
                          </div>
                          <button 
                             onClick={handleSendBulk}
                             disabled={loading || selectedStudents.length === 0}
                             className="w-full py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
                          >
-                            {loading ? 'Enviando...' : <><Send size={18}/> Enviar para {selectedStudents.length} alunas</>}
+                            {loading ? 'Enviando...' : <><Send size={18}/> Enviar para {selectedStudents.length} contatos</>}
                          </button>
                     </div>
                 </div>

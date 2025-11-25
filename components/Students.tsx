@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
-import { Student, StudentStatus, Course, CourseClass } from '../types';
-import { Search, Plus, Phone, Edit2, MessageCircle, Sparkles, X, Save, Calendar, DollarSign, Trash2, CheckCircle, ShoppingBag, Trophy, User } from 'lucide-react';
+import { Student, StudentStatus, Course, CourseClass, StudentType } from '../types';
+import { Search, Plus, Phone, Edit2, MessageCircle, Sparkles, X, Save, Calendar, DollarSign, Trash2, CheckCircle, ShoppingBag, Trophy, User, Crown, Filter } from 'lucide-react';
 import { generateFollowUpMessage } from '../services/geminiService';
 import { ToastType } from './Toast';
 
@@ -11,11 +10,12 @@ interface StudentsProps {
   classes: CourseClass[];
   onAddStudent: (s: Student) => void;
   onUpdateStudent: (s: Student) => void;
-  onEnrollStudent: (studentId: string, classId: string, paidAmount: number) => void;
+  onEnrollStudent: (studentId: string, classId: string, paidAmount: number, isPaid: boolean) => void;
   onShowToast: (message: string, type: ToastType) => void;
 }
 
 const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddStudent, onUpdateStudent, onEnrollStudent, onShowToast }) => {
+  const [activeTab, setActiveTab] = useState<StudentType>('student'); // 'lead' | 'student'
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalTab, setModalTab] = useState<'info' | 'history'>('info');
@@ -23,12 +23,28 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
   const [aiMessage, setAiMessage] = useState<{ studentId: string, text: string } | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
   
+  // Enroll States
   const [selectedClassId, setSelectedClassId] = useState('');
   const [negotiatedPrice, setNegotiatedPrice] = useState<string>('');
+  const [isPaymentReceived, setIsPaymentReceived] = useState(false);
+
+  // Filter
+  const [showActiveOnly, setShowActiveOnly] = useState(false);
 
   const filteredStudents = students.filter(s => {
+    // Type Filter (Lead vs Student)
+    if (s.type !== activeTab) return false;
+
+    // Search Filter
     const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.phone.includes(searchTerm);
-    return matchesSearch;
+    if (!matchesSearch) return false;
+
+    // Active Course Filter
+    if (activeTab === 'student' && showActiveOnly) {
+       return s.status === StudentStatus.ACTIVE;
+    }
+
+    return true;
   });
 
   const handleNewStudent = () => {
@@ -37,6 +53,7 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
       name: '',
       phone: '',
       photo: '',
+      type: 'lead', // Default to lead
       status: StudentStatus.INTERESTED,
       interestedIn: [],
       history: [],
@@ -48,6 +65,7 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
     setIsModalOpen(true);
     setSelectedClassId('');
     setNegotiatedPrice('');
+    setIsPaymentReceived(false);
   };
 
   const handleEditStudent = (s: Student) => {
@@ -56,6 +74,7 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
     setIsModalOpen(true);
     setSelectedClassId('');
     setNegotiatedPrice('');
+    setIsPaymentReceived(false);
   };
 
   const handleSave = () => {
@@ -64,12 +83,17 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
         return;
     }
     
+    // Auto-correct type if history exists
+    if (editingStudent.history && editingStudent.history.length > 0 && editingStudent.history.some(h => h.status === 'paid')) {
+        editingStudent.type = 'student';
+    }
+
     if (students.find(s => s.id === editingStudent.id)) {
       onUpdateStudent(editingStudent as Student);
-      onShowToast('Aluna atualizada com sucesso!', 'success');
+      onShowToast('Dados atualizados com sucesso!', 'success');
     } else {
       onAddStudent(editingStudent as Student);
-      onShowToast('Aluna cadastrada com sucesso!', 'success');
+      onShowToast('Cadastro realizado com sucesso!', 'success');
     }
     setIsModalOpen(false);
     setEditingStudent(null);
@@ -95,7 +119,7 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
   const handleEnrollInClass = () => {
     if (!editingStudent || !selectedClassId) return;
     if (!editingStudent.id) {
-        onShowToast('Salve a aluna primeiro antes de matricular.', 'error');
+        onShowToast('Salve o cadastro antes de matricular.', 'error');
         return;
     }
     const finalPrice = parseFloat(negotiatedPrice);
@@ -104,36 +128,62 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
         return;
     }
 
-    onEnrollStudent(editingStudent.id, selectedClassId, finalPrice);
+    onEnrollStudent(editingStudent.id, selectedClassId, finalPrice, isPaymentReceived);
+    
+    // If paid, force switch type to student in local state to reflect immediately
+    if (isPaymentReceived) {
+        setEditingStudent(prev => prev ? ({ ...prev, type: 'student', status: StudentStatus.ACTIVE }) : null);
+    }
+    
     onShowToast('Matrícula realizada com sucesso!', 'success');
-    setIsModalOpen(false);
+    // Don't close modal immediately, let them see update
+    setModalTab('history');
+    setSelectedClassId('');
   };
 
   const handleGenerateAiMessage = async (student: Student) => {
     setLoadingAi(true);
     setAiMessage(null);
-    
     const interestName = student.interestedIn.length > 0 
       ? courses.find(c => c.id === student.interestedIn[0])?.name || 'nossos cursos'
       : 'nossos cursos';
-
     const text = await generateFollowUpMessage(student.name, interestName, student.lastContact);
     setAiMessage({ studentId: student.id, text });
     setLoadingAi(false);
   };
 
+  const getPaidEnrollmentCount = (s: Student) => s.history.filter(h => h.status === 'paid').length;
+
   return (
     <div className="pb-20 md:pb-0 space-y-6 animate-fade-in h-full flex flex-col">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <h2 className="text-2xl font-bold text-gray-800 dark:text-dark-text">Alunas e Leads</h2>
+        <div>
+           <h2 className="text-2xl font-bold text-gray-800 dark:text-dark-text">Gestão de Alunas</h2>
+           <p className="text-sm text-gray-500 dark:text-dark-textMuted">Gerencie leads e alunas matriculadas.</p>
+        </div>
         <div className="flex gap-2">
           <button 
             onClick={handleNewStudent}
             className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-md shadow-primary-200 active:scale-95 transition-all"
           >
-            <Plus size={20} /> <span className="hidden sm:inline">Nova Aluna</span>
+            <Plus size={20} /> <span className="hidden sm:inline">Novo Cadastro</span>
           </button>
         </div>
+      </div>
+
+      <div className="flex items-center gap-4 border-b border-gray-200 dark:border-dark-border">
+         <button 
+           onClick={() => setActiveTab('student')}
+           className={`pb-3 px-2 font-bold text-sm transition-all border-b-2 ${activeTab === 'student' ? 'text-primary-600 border-primary-500' : 'text-gray-500 border-transparent hover:text-gray-700'}`}
+         >
+            Alunas Matriculadas
+         </button>
+         <button 
+           onClick={() => setActiveTab('lead')}
+           className={`pb-3 px-2 font-bold text-sm transition-all border-b-2 ${activeTab === 'lead' ? 'text-primary-600 border-primary-500' : 'text-gray-500 border-transparent hover:text-gray-700'}`}
+         >
+            Contatos (Leads)
+         </button>
       </div>
 
       <div className="flex flex-col md:flex-row gap-3 shrink-0">
@@ -144,39 +194,56 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
             placeholder="Buscar por nome ou telefone..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface text-gray-800 dark:text-dark-text focus:outline-none focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-900 focus:border-primary-400"
+            className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text focus:outline-none focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-900 focus:border-primary-400"
           />
         </div>
+        {activeTab === 'student' && (
+            <button 
+                onClick={() => setShowActiveOnly(!showActiveOnly)}
+                className={`px-4 py-2 rounded-xl border flex items-center gap-2 transition-colors text-sm font-medium ${showActiveOnly ? 'bg-primary-50 border-primary-200 text-primary-700 dark:bg-primary-900/20 dark:border-primary-800' : 'bg-white border-gray-200 text-gray-600 dark:bg-slate-800 dark:border-slate-700 dark:text-gray-300'}`}
+            >
+                <Filter size={16}/> Em Curso Ativo
+            </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filteredStudents.map(student => (
+        {filteredStudents.map(student => {
+          const paidCount = getPaidEnrollmentCount(student);
+          return (
           <div 
             key={student.id} 
             className="bg-white dark:bg-dark-surface rounded-xl border border-gray-100 dark:border-dark-border shadow-sm hover:shadow-md transition-all group relative p-5"
           >
             <div className="flex justify-between items-start mb-3">
               <div className="flex items-center gap-3">
-                {student.photo ? (
-                   <img src={student.photo} alt={student.name} className="w-12 h-12 rounded-full object-cover border border-gray-200 dark:border-dark-border" />
-                ) : (
-                   <div className="w-12 h-12 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-lg">
-                      {student.name.substring(0,2).toUpperCase()}
-                   </div>
-                )}
+                <div className="relative">
+                    {student.photo ? (
+                        <img src={student.photo} alt={student.name} className="w-12 h-12 rounded-full object-cover border border-gray-200 dark:border-dark-border" />
+                    ) : (
+                        <div className="w-12 h-12 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-lg">
+                            {student.name.substring(0,2).toUpperCase()}
+                        </div>
+                    )}
+                    {student.type === 'student' && paidCount > 0 && (
+                        <div className="absolute -top-1 -right-1 bg-amber-400 text-white rounded-full p-0.5 border-2 border-white dark:border-dark-surface" title={`${paidCount} Matrículas Pagas`}>
+                            <Crown size={10} fill="currentColor" />
+                        </div>
+                    )}
+                </div>
                 <div>
                   <h3 className="font-bold text-gray-800 dark:text-dark-text text-lg leading-tight">{student.name}</h3>
                   <div className="flex flex-wrap gap-1 mt-1">
                     <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
                         student.status === StudentStatus.ACTIVE ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
                         student.status === StudentStatus.INTERESTED ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                        'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                        'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-gray-300'
                     }`}>
                         {student.status}
                     </span>
-                    {student.history.length > 0 && (
+                    {paidCount > 0 && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 flex items-center gap-1">
-                            <Trophy size={10} /> {student.history.length}
+                            <Crown size={10} /> {paidCount}
                         </span>
                     )}
                   </div>
@@ -191,10 +258,10 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
               <div className="flex items-center gap-2">
                 <Phone size={14} /> {student.phone}
               </div>
-              {student.lastPurchase && (
+              {student.type === 'student' && student.history.length > 0 && (
                   <div className="flex items-center gap-2 text-xs">
                       <ShoppingBag size={14} className="text-gray-400"/> 
-                      Última compra: <span className="font-medium text-gray-700 dark:text-gray-300">{new Date(student.lastPurchase).toLocaleDateString('pt-BR')}</span>
+                      Última matrícula: <span className="font-medium text-gray-700 dark:text-gray-300">{new Date(student.history[student.history.length-1].date).toLocaleDateString('pt-BR')}</span>
                   </div>
               )}
               {student.interestedIn.length > 0 && (
@@ -232,14 +299,14 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
 
             {/* AI Message Popover */}
             {aiMessage?.studentId === student.id && (
-              <div className="absolute bottom-full left-0 right-0 mb-2 bg-white dark:bg-dark-surface border border-indigo-100 dark:border-indigo-900/30 rounded-xl shadow-xl p-3 z-20 animate-in fade-in slide-in-from-bottom-2">
+              <div className="absolute bottom-full left-0 right-0 mb-2 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-slate-700 rounded-xl shadow-xl p-3 z-20 animate-in fade-in slide-in-from-bottom-2">
                 <div className="flex justify-between items-center mb-2">
                   <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1"><Sparkles size={12}/> Sugestão</h4>
                   <button onClick={() => setAiMessage(null)} className="text-gray-300 hover:text-gray-500"><X size={14}/></button>
                 </div>
                 <textarea 
                   readOnly 
-                  className="w-full text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-white/5 rounded-lg p-2 mb-2 resize-none focus:outline-none"
+                  className="w-full text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-slate-900 rounded-lg p-2 mb-2 resize-none focus:outline-none"
                   rows={3}
                   value={aiMessage.text}
                 />
@@ -256,7 +323,8 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
               </div>
             )}
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {isModalOpen && editingStudent && (
@@ -265,7 +333,7 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
             <div className="bg-primary-500 p-4 flex justify-between items-center shrink-0 text-white">
               <h3 className="font-bold text-lg flex items-center gap-2">
                 {students.find(s => s.id === editingStudent.id) ? <Edit2 size={18}/> : <Plus size={18}/>}
-                {students.find(s => s.id === editingStudent.id) ? 'Editar Aluna' : 'Nova Aluna'}
+                {students.find(s => s.id === editingStudent.id) ? 'Editar Cadastro' : 'Novo Cadastro'}
               </h3>
               <button onClick={() => setIsModalOpen(false)} className="text-white/80 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors">
                 <X size={20} />
@@ -284,7 +352,7 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
                 className={`flex-1 py-3 text-sm font-semibold transition-colors relative ${modalTab === 'history' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}`}
                 onClick={() => setModalTab('history')}
                >
-                 Matrículas e Cursos
+                 Matrículas
                  {modalTab === 'history' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-500"></div>}
                </button>
             </div>
@@ -309,7 +377,7 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
                       <input 
                         type="text" 
                         placeholder="https://..."
-                        className="w-full border border-gray-200 dark:border-dark-border bg-white dark:bg-white/5 text-gray-800 dark:text-dark-text rounded-lg p-2.5 focus:ring-2 focus:ring-primary-200 outline-none"
+                        className="w-full border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text rounded-lg p-2.5 focus:ring-2 focus:ring-primary-200 outline-none"
                         value={editingStudent.photo || ''}
                         onChange={e => setEditingStudent({...editingStudent, photo: e.target.value})}
                       />
@@ -318,7 +386,7 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
                       <label className="block text-xs font-medium text-gray-500 dark:text-dark-textMuted mb-1">Nome Completo</label>
                       <input 
                         type="text" 
-                        className="w-full border border-gray-200 dark:border-dark-border bg-white dark:bg-white/5 text-gray-800 dark:text-dark-text rounded-lg p-2.5 focus:ring-2 focus:ring-primary-200 outline-none"
+                        className="w-full border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text rounded-lg p-2.5 focus:ring-2 focus:ring-primary-200 outline-none"
                         value={editingStudent.name}
                         onChange={e => setEditingStudent({...editingStudent, name: e.target.value})}
                       />
@@ -327,27 +395,27 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
                       <label className="block text-xs font-medium text-gray-500 dark:text-dark-textMuted mb-1">WhatsApp/Telefone</label>
                       <input 
                         type="text" 
-                        className="w-full border border-gray-200 dark:border-dark-border bg-white dark:bg-white/5 text-gray-800 dark:text-dark-text rounded-lg p-2.5 focus:ring-2 focus:ring-primary-200 outline-none"
+                        className="w-full border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text rounded-lg p-2.5 focus:ring-2 focus:ring-primary-200 outline-none"
                         value={editingStudent.phone}
                         onChange={e => setEditingStudent({...editingStudent, phone: e.target.value})}
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 dark:text-dark-textMuted mb-1">Status Atual</label>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-dark-textMuted mb-1">Tipo de Cadastro</label>
                       <select 
-                        className="w-full border border-gray-200 dark:border-dark-border bg-white dark:bg-white/5 text-gray-800 dark:text-dark-text rounded-lg p-2.5 focus:ring-2 focus:ring-primary-200 outline-none"
-                        value={editingStudent.status}
-                        onChange={e => setEditingStudent({...editingStudent, status: e.target.value as StudentStatus})}
+                        className="w-full border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text rounded-lg p-2.5 focus:ring-2 focus:ring-primary-200 outline-none"
+                        value={editingStudent.type}
+                        disabled // Disabled because logic handles it
                       >
-                        <option value={StudentStatus.INTERESTED}>Interessada (Lead)</option>
-                        <option value={StudentStatus.ACTIVE}>Em Curso (Ativa)</option>
-                        <option value={StudentStatus.ALUMNI}>Formada (Ex-Aluna)</option>
+                        <option value="lead">Contato / Lead</option>
+                        <option value="student">Aluna (Com Matrícula)</option>
                       </select>
+                      <p className="text-[10px] text-gray-400 mt-1">Vira aluna automaticamente ao pagar.</p>
                     </div>
                     <div className="col-span-2">
                       <label className="block text-xs font-medium text-gray-500 dark:text-dark-textMuted mb-1">Observações</label>
                       <textarea 
-                        className="w-full border border-gray-200 dark:border-dark-border bg-white dark:bg-white/5 text-gray-800 dark:text-dark-text rounded-lg p-2.5 focus:ring-2 focus:ring-primary-200 outline-none resize-none"
+                        className="w-full border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text rounded-lg p-2.5 focus:ring-2 focus:ring-primary-200 outline-none resize-none"
                         rows={3}
                         value={editingStudent.notes}
                         onChange={e => setEditingStudent({...editingStudent, notes: e.target.value})}
@@ -368,11 +436,14 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
                               const courseName = courses.find(course => course.id === c.courseId)?.name;
                               const hist = editingStudent.history?.find(h => h.courseId === c.courseId);
                               return (
-                                <div key={c.id} className="bg-white dark:bg-dark-surface p-3 rounded-lg border border-primary-200 dark:border-primary-800/30 flex justify-between items-center shadow-sm">
+                                <div key={c.id} className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-primary-200 dark:border-slate-700 flex justify-between items-center shadow-sm">
                                    <div>
                                       <div className="text-sm font-bold text-gray-800 dark:text-dark-text">{courseName}</div>
                                       <div className="text-xs text-gray-500 dark:text-dark-textMuted">Início: {new Date(c.startDate).toLocaleDateString('pt-BR')}</div>
-                                      {hist && <div className="text-[10px] text-green-600 dark:text-green-400 font-medium mt-0.5">Pago: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(hist.paid)}</div>}
+                                      <div className={`text-[10px] font-bold mt-1 ${hist?.status === 'paid' ? 'text-green-600' : 'text-amber-500'}`}>
+                                         {hist?.status === 'paid' ? 'PAGAMENTO CONFIRMADO' : 'AGUARDANDO PAGAMENTO'}
+                                         {hist && ` - ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(hist.paid)}`}
+                                      </div>
                                    </div>
                                    <span className="text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded-full font-bold border border-green-200 dark:border-green-800/30">Matriculada</span>
                                 </div>
@@ -389,7 +460,7 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
                          <label className="block text-xs font-bold text-gray-600 dark:text-gray-300 mb-2">Nova Matrícula</label>
                          <div className="flex flex-col gap-2">
                             <select 
-                                className="w-full text-sm border border-gray-300 dark:border-dark-border rounded-lg p-2 outline-none focus:border-primary-400 bg-white dark:bg-dark-surface text-gray-800 dark:text-dark-text"
+                                className="w-full text-sm border border-gray-300 dark:border-slate-600 rounded-lg p-2 outline-none focus:border-primary-400 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text"
                                 value={selectedClassId}
                                 onChange={handleClassSelectionChange}
                             >
@@ -408,22 +479,34 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
                             </select>
                             
                             {selectedClassId && (
-                                <div className="flex gap-2 animate-in slide-in-from-top-2 fade-in">
-                                    <div className="relative flex-1">
-                                        <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" size={14}/>
+                                <div className="space-y-2 animate-in slide-in-from-top-2 fade-in">
+                                    <div className="flex gap-2">
+                                        <div className="relative flex-1">
+                                            <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" size={14}/>
+                                            <input 
+                                                type="number" 
+                                                placeholder="Valor Negociado" 
+                                                className="w-full pl-7 p-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg outline-none focus:border-primary-400 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text"
+                                                value={negotiatedPrice}
+                                                onChange={e => setNegotiatedPrice(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 rounded border border-gray-200 dark:border-slate-600">
                                         <input 
-                                            type="number" 
-                                            placeholder="Valor Negociado" 
-                                            className="w-full pl-7 p-2 text-sm border border-gray-300 dark:border-dark-border rounded-lg outline-none focus:border-primary-400 bg-white dark:bg-dark-surface text-gray-800 dark:text-dark-text"
-                                            value={negotiatedPrice}
-                                            onChange={e => setNegotiatedPrice(e.target.value)}
+                                            type="checkbox" 
+                                            id="paymentCheck" 
+                                            checked={isPaymentReceived} 
+                                            onChange={e => setIsPaymentReceived(e.target.checked)}
+                                            className="rounded text-primary-500 focus:ring-primary-500"
                                         />
+                                        <label htmlFor="paymentCheck" className="text-sm text-gray-700 dark:text-gray-300">Pagamento recebido?</label>
                                     </div>
                                     <button 
                                       onClick={handleEnrollInClass}
-                                      className="bg-primary-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-primary-700 h-[38px] shadow-md"
+                                      className="w-full bg-primary-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-primary-700 h-[38px] shadow-md"
                                     >
-                                      Confirmar
+                                      Confirmar Matrícula
                                     </button>
                                 </div>
                             )}
@@ -456,7 +539,7 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
                       
                       <div className="mt-2">
                         <select 
-                           className="w-full text-sm border border-gray-200 dark:border-dark-border rounded-lg p-2 bg-white dark:bg-dark-surface text-gray-600 dark:text-dark-text focus:ring-2 focus:ring-primary-200 outline-none"
+                           className="w-full text-sm border border-gray-200 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800 text-gray-600 dark:text-dark-text focus:ring-2 focus:ring-primary-200 outline-none"
                            onChange={(e) => {
                              if(e.target.value) {
                                setEditingStudent(prev => ({
@@ -475,33 +558,6 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
                           ))}
                         </select>
                       </div>
-                   </div>
-
-                   <div>
-                      <h4 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Histórico Concluído</h4>
-                      {editingStudent.history && editingStudent.history.length > 0 ? (
-                        <div className="space-y-2">
-                          {editingStudent.history.map((record, idx) => {
-                            const c = courses.find(course => course.id === record.courseId);
-                            return (
-                              <div key={idx} className="flex items-center justify-between bg-gray-50 dark:bg-white/5 p-3 rounded-lg border border-gray-200 dark:border-dark-border">
-                                 <div className="flex items-center gap-2">
-                                   <CheckCircle size={16} className="text-green-500"/>
-                                   <div>
-                                      <div className="text-sm text-gray-700 dark:text-dark-text font-medium">{c?.name}</div>
-                                      <div className="text-xs text-gray-500 dark:text-dark-textMuted">
-                                          {new Date(record.date).toLocaleDateString('pt-BR')} • 
-                                          Pago: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(record.paid)}
-                                      </div>
-                                   </div>
-                                 </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-gray-400 dark:text-dark-textMuted italic">Nenhum curso histórico.</p>
-                      )}
                    </div>
                 </div>
               )}

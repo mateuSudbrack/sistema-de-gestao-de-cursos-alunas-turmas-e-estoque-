@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { LayoutDashboard, Users, GraduationCap, Package, Calendar, FileEdit, Sparkles, Moon, Sun, Kanban, MessageSquareText, ChevronDown, ChevronRight, UserCircle } from 'lucide-react';
+import { LayoutDashboard, Users, GraduationCap, Package, Calendar, FileEdit, Sparkles, Moon, Sun, Kanban, MessageSquareText, ChevronDown, ChevronRight, UserCircle, CreditCard } from 'lucide-react';
 import { View, Theme } from '../types';
 
 interface NavigationProps {
@@ -41,7 +41,7 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, cu
       icon: Users,
       children: [
         { id: 'students', label: 'Lista de Alunas', icon: UserCircle },
-        { id: 'pipeline', label: 'Pipeline (Funil)', icon: Kanban }
+        { id: 'pipeline', label: 'Funil de Contatos', icon: Kanban }
       ]
     },
     { 
@@ -55,6 +55,12 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, cu
       id: 'inventory', 
       label: 'Estoque', 
       icon: Package 
+    },
+    { 
+      type: 'item', 
+      id: 'payments', 
+      label: 'Pagamentos', 
+      icon: CreditCard 
     },
     { 
       type: 'item', 
@@ -75,7 +81,7 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, cu
     { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
     { id: 'agenda', label: 'Agenda', icon: Calendar },
     { id: 'students', label: 'Alunas', icon: Users },
-    { id: 'pipeline', label: 'Funil', icon: Kanban },
+    { id: 'payments', label: 'Pagar', icon: CreditCard },
     { id: 'courses', label: 'Cursos', icon: GraduationCap },
   ];
 
@@ -168,7 +174,7 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, cu
              {currentTheme === 'light' ? <Moon size={16}/> : <Sun size={16}/>}
              <span className="text-xs font-medium">{currentTheme === 'light' ? 'Modo Escuro' : 'Modo Claro'}</span>
            </button>
-           <p className="text-center text-[10px] text-gray-400 mt-4">Versão 1.6.0</p>
+           <p className="text-center text-[10px] text-gray-400 mt-4">Versão 1.7.0</p>
         </div>
       </div>
 

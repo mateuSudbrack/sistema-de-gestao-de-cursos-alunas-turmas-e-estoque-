@@ -1,7 +1,6 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { INITIAL_DATA } from './constants';
-import { AppState, View, Student, CourseClass, StudentStatus, Course, PublicFormConfig, PipelineDefinition, EvolutionConfig, AutomationConfig } from './types';
+import { AppState, View, Student, CourseClass, StudentStatus, Course, PublicFormConfig, PipelineDefinition, EvolutionConfig, AutomationConfig, PaymentLink, AutomationTrigger, StudentType } from './types';
 import Navigation from './components/Navigation';
 import Dashboard from './components/Dashboard';
 import Students from './components/Students';
@@ -11,37 +10,129 @@ import Inventory from './components/Inventory';
 import Agenda from './components/Agenda';
 import FormBuilder from './components/FormBuilder';
 import Messages from './components/Messages';
+import Payments from './components/Payments';
 import ToastContainer, { ToastMessage, ToastType } from './components/Toast';
 import { evolutionService } from './services/evolutionService';
 
+// URL da API Backend
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000';
+
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
+  const [loading, setLoading] = useState(true);
   
-  // Persistence: Load from localStorage or fallback to INITIAL_DATA
-  const [data, setData] = useState<AppState>(() => {
-    const saved = localStorage.getItem('estetica-pro-data');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return { 
-            ...INITIAL_DATA, 
-            ...parsed,
-            pipelines: parsed.pipelines || INITIAL_DATA.pipelines,
-            defaultPipelineId: parsed.defaultPipelineId || INITIAL_DATA.defaultPipelineId,
-            evolutionConfig: parsed.evolutionConfig || INITIAL_DATA.evolutionConfig,
-            automations: parsed.automations || INITIAL_DATA.automations,
-            // Ensure classes have schedule array if loading form old data
-            classes: parsed.classes?.map((c: any) => ({ ...c, schedule: c.schedule || [] })) || INITIAL_DATA.classes
-        }; 
-      } catch (e) {
-        console.error("Failed to parse saved data", e);
-        return INITIAL_DATA;
-      }
-    }
-    return INITIAL_DATA;
-  });
+  // Estado Inicial
+  const [data, setData] = useState<AppState>(INITIAL_DATA);
 
-  // Apply Theme
+  // --- 1. CARREGAR DADOS DO SERVIDOR AO INICIAR ---
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        console.log(`📡 Conectando ao servidor ${API_BASE_URL}...`);
+        const res = await fetch(`${API_BASE_URL}/sync`);
+        
+        if (res.ok) {
+          const json = await res.json();
+          const dbStudents = json.students || [];
+          const globalData = json.global || {};
+
+          // Processar Alunos do Banco
+          const processedStudents: Student[] = dbStudents.map((s: any) => ({
+             id: s.id,
+             name: s.name,
+             phone: s.phone,
+             email: s.email,
+             photo: s.photo,
+             type: (s.type as StudentType) || 'lead',
+             status: (s.status as StudentStatus) || StudentStatus.INTERESTED,
+             pipelineId: s.pipelineId || INITIAL_DATA.defaultPipelineId,
+             stageId: s.stageId,
+             interestedIn: s.interestedIn || [],
+             history: s.history || [],
+             lastContact: s.lastContact ? s.lastContact.split('T')[0] : '',
+             nextFollowUp: s.nextFollowUp ? s.nextFollowUp.split('T')[0] : '',
+             lastPurchase: s.lastPurchase ? s.lastPurchase.split('T')[0] : undefined,
+             notes: s.notes || ''
+          }));
+
+          // Atualizar Estado com Dados Reais
+          setData(prev => ({
+             ...prev,
+             students: processedStudents.length > 0 ? processedStudents : prev.students,
+             // Se houver dados globais salvos, usa eles. Se não, usa o inicial.
+             courses: globalData.courses || prev.courses,
+             classes: globalData.classes || prev.classes,
+             products: globalData.products || prev.products,
+             sales: globalData.sales || prev.sales,
+             pipelines: globalData.pipelines || prev.pipelines,
+             automations: globalData.automations || prev.automations,
+             paymentLinks: globalData.paymentLinks || prev.paymentLinks,
+             evolutionConfig: globalData.evolutionConfig || prev.evolutionConfig
+          }));
+          console.log("✅ Dados sincronizados com sucesso!");
+        } else {
+          console.error("❌ Erro ao baixar dados do servidor");
+        }
+      } catch (e) {
+        console.error("⚠️ Falha de conexão. Servidor offline ou CORS bloqueado.", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // --- 2. SALVAR ESTADO GLOBAL NO SERVIDOR ---
+  const saveTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (loading) return; 
+
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+    saveTimeoutRef.current = setTimeout(async () => {
+       const globalState = {
+          courses: data.courses,
+          classes: data.classes,
+          products: data.products,
+          sales: data.sales,
+          pipelines: data.pipelines,
+          automations: data.automations,
+          paymentLinks: data.paymentLinks,
+          evolutionConfig: data.evolutionConfig
+       };
+
+       try {
+          await fetch(`${API_BASE_URL}/sync/global`, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify(globalState)
+          });
+       } catch (e) {
+          console.warn("Erro ao salvar estado global", e);
+       }
+    }, 2000) as unknown as number;
+
+  }, [data.courses, data.classes, data.products, data.sales, data.pipelines, data.automations, data.paymentLinks, data.evolutionConfig, loading]);
+
+
+  // --- 3. FUNÇÕES DE SYNC INDIVIDUAL (ALUNOS) ---
+  const syncStudent = async (student: Student) => {
+     try {
+        await fetch(`${API_BASE_URL}/students`, {
+           method: 'POST',
+           headers: {'Content-Type': 'application/json'},
+           body: JSON.stringify(student)
+        });
+     } catch (e) {
+        console.error("Erro ao salvar aluno no banco", e);
+     }
+  };
+
+  // --- RESTO DO CÓDIGO (HANDLERS) ---
+  
+  // Theme
   useEffect(() => {
     if (data.theme === 'dark') {
       document.documentElement.classList.add('dark');
@@ -50,14 +141,8 @@ const App: React.FC = () => {
     }
   }, [data.theme]);
 
-  // Save to localStorage whenever data changes
-  useEffect(() => {
-    localStorage.setItem('estetica-pro-data', JSON.stringify(data));
-  }, [data]);
-
   // Toast System
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
   const addToast = (message: string, type: ToastType = 'info') => {
     const id = crypto.randomUUID();
     setToasts(prev => [...prev, { id, type, message }]);
@@ -65,9 +150,27 @@ const App: React.FC = () => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 3000);
   };
+  const removeToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id));
 
-  const removeToast = (id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
+  // --- Automation Processor ---
+  const triggerAutomation = async (trigger: AutomationTrigger, student: Student, extraData?: any) => {
+      const rules = data.automations.rules?.filter(r => r.active && r.trigger === trigger);
+      if (!rules || rules.length === 0 || !data.evolutionConfig.isConnected) return;
+
+      for (const rule of rules) {
+          const rawText = rule.message;
+          const formattedText = rawText
+            .replace('{nome}', student.name.split(' ')[0])
+            .replace('{nome_completo}', student.name)
+            .replace('{telefone}', student.phone);
+          
+          try {
+              await evolutionService.sendMessage(data.evolutionConfig, student.phone, formattedText);
+              console.log(`Automation "${rule.name}" executed for ${student.name}`);
+          } catch (e) {
+              console.error("Automation error", e);
+          }
+      }
   };
 
   // Handlers
@@ -80,31 +183,17 @@ const App: React.FC = () => {
     if (!s.pipelineId) s.pipelineId = data.defaultPipelineId;
     
     setData(prev => ({ ...prev, students: [s, ...prev.students] }));
-    
-    // Automation: Welcome Message
-    if (data.automations.welcomeMessage && data.evolutionConfig.instanceName) {
-         try {
-            const rawText = data.automations.welcomeMessageText || '';
-            // Replace placeholders
-            const formattedText = rawText
-                .replace('{nome}', s.name.split(' ')[0]) // First name usually better for welcome
-                .replace('{nome_completo}', s.name)
-                .replace('{telefone}', s.phone);
-
-            await evolutionService.sendMessage(data.evolutionConfig, s.phone, formattedText);
-            addToast(`Mensagem de boas-vindas enviada para ${s.name}!`, 'success');
-         } catch (e) {
-            console.error("Erro ao enviar automação de boas-vindas", e);
-            addToast("Erro ao enviar mensagem automática de boas-vindas.", 'error');
-         }
-    }
+    addToast('Contato salvo!', 'success');
+    triggerAutomation('lead_created', s);
+    syncStudent(s);
   };
 
-  const handleUpdateStudent = (student: Student) => {
+  const handleUpdateStudent = async (student: Student) => {
     setData(prev => ({
       ...prev,
       students: prev.students.map(s => s.id === student.id ? student : s)
     }));
+    syncStudent(student);
   };
 
   const handleUpdateStock = (id: string, qty: number) => {
@@ -131,19 +220,17 @@ const App: React.FC = () => {
       total: finalTotal
     };
 
-    // Update Stock
     const updatedProducts = data.products.map(p => {
       const soldItem = items.find(i => i.productId === p.id);
-      if (soldItem) {
-        return { ...p, quantity: p.quantity - soldItem.qty };
-      }
+      if (soldItem) return { ...p, quantity: p.quantity - soldItem.qty };
       return p;
     });
     
-    // Update Student Last Purchase
+    let studentToUpdate: Student | undefined;
     const updatedStudents = data.students.map(s => {
         if (s.id === studentId) {
-            return { ...s, lastPurchase: newSale.date };
+            studentToUpdate = { ...s, lastPurchase: newSale.date };
+            return studentToUpdate;
         }
         return s;
     });
@@ -154,6 +241,8 @@ const App: React.FC = () => {
       products: updatedProducts,
       students: updatedStudents
     }));
+
+    if(studentToUpdate) handleUpdateStudent(studentToUpdate);
   };
 
   const handleAddClass = (newClass: CourseClass) => {
@@ -203,6 +292,7 @@ const App: React.FC = () => {
           id: crypto.randomUUID(),
           name,
           phone,
+          type: 'lead',
           status: StudentStatus.INTERESTED,
           pipelineId: data.defaultPipelineId,
           interestedIn: [courseId],
@@ -215,7 +305,7 @@ const App: React.FC = () => {
       addToast('Inscrição recebida com sucesso! Entraremos em contato.', 'success');
   };
 
-  const handleEnrollStudent = (studentId: string, classId: string, paidAmount: number) => {
+  const handleEnrollStudent = (studentId: string, classId: string, paidAmount: number, isPaid: boolean) => {
     const updatedClasses = data.classes.map(c => {
       if (c.id === classId && !c.enrolledStudentIds.includes(studentId)) {
         return { ...c, enrolledStudentIds: [...c.enrolledStudentIds, studentId] };
@@ -224,25 +314,38 @@ const App: React.FC = () => {
     });
 
     const targetClass = data.classes.find(c => c.id === classId);
+    let updatedStudentRef: Student | null = null;
+
     const updatedStudents = data.students.map(s => {
       if (s.id === studentId) {
         const newHistoryItem = targetClass ? {
             courseId: targetClass.courseId,
+            classId: targetClass.id,
             date: new Date().toISOString().split('T')[0],
-            paid: paidAmount
+            paid: paidAmount,
+            status: isPaid ? 'paid' : 'pending' as 'paid'|'pending'
         } : null;
 
-        return {
+        const updatedStudent = {
           ...s,
+          type: isPaid ? 'student' as const : s.type, 
           status: StudentStatus.ACTIVE,
           interestedIn: targetClass ? s.interestedIn.filter(id => id !== targetClass.courseId) : s.interestedIn,
           history: newHistoryItem ? [...s.history, newHistoryItem] : s.history
         };
+        updatedStudentRef = updatedStudent;
+        return updatedStudent;
       }
       return s;
     });
 
     setData(prev => ({ ...prev, classes: updatedClasses, students: updatedStudents }));
+    
+    if(updatedStudentRef) {
+        handleUpdateStudent(updatedStudentRef);
+        triggerAutomation('enrollment_created', updatedStudentRef);
+        if (isPaid) triggerAutomation('payment_confirmed', updatedStudentRef);
+    }
   };
 
   const handleUnenrollStudent = (studentId: string, classId: string) => {
@@ -252,10 +355,130 @@ const App: React.FC = () => {
           }
           return c;
       });
-      // Note: We don't remove history or revert status automatically to preserve financial records
-      // unless explicitly requested.
       setData(prev => ({ ...prev, classes: updatedClasses }));
       addToast('Aluna removida da turma.', 'info');
+  };
+
+  // --- Payment Links Logic ---
+  const handleAddLink = (link: PaymentLink) => {
+      setData(prev => ({ ...prev, paymentLinks: [...prev.paymentLinks, link] }));
+  };
+
+  const handleDeleteLink = (id: string) => {
+      setData(prev => ({ ...prev, paymentLinks: prev.paymentLinks.filter(l => l.id !== id) }));
+  };
+
+  const handleGeneratePaymentLink = (courseId: string) => {
+      const course = data.courses.find(c => c.id === courseId);
+      if(!course) return;
+
+      const link: PaymentLink = {
+          id: crypto.randomUUID(),
+          title: course.name,
+          description: `Matrícula para ${course.name}`,
+          amount: course.price,
+          courseId: course.id,
+          methods: ['pix', 'credit'],
+          active: true,
+          clicks: 0
+      };
+      handleAddLink(link);
+      addToast('Link gerado e copiado!', 'success');
+      setCurrentView('payments');
+  };
+
+  const handleSimulatePayment = (linkId: string, customerName: string, customerPhone: string) => {
+      const link = data.paymentLinks.find(l => l.id === linkId);
+      if (!link) return;
+
+      let student = data.students.find(s => s.phone.replace(/\D/g,'') === customerPhone.replace(/\D/g,''));
+      let studentId = student?.id;
+      let isNew = false;
+
+      if (!student) {
+          isNew = true;
+          student = {
+              id: crypto.randomUUID(),
+              name: customerName,
+              phone: customerPhone,
+              type: 'lead' as StudentType,
+              status: StudentStatus.INTERESTED,
+              interestedIn: link.courseId ? [link.courseId] : [],
+              history: [],
+              lastContact: new Date().toISOString().split('T')[0],
+              nextFollowUp: '',
+              notes: 'Criado via Link de Pagamento'
+          } as Student;
+          studentId = student.id;
+      }
+
+      let newHistoryItem = null;
+      let targetClassId = '';
+
+      if (link.courseId) {
+          const openClass = data.classes
+             .filter(c => c.courseId === link.courseId && c.status === 'open' && c.enrolledStudentIds.length < c.maxStudents)
+             .sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())[0];
+          
+          if (openClass) {
+              targetClassId = openClass.id;
+              newHistoryItem = {
+                  courseId: link.courseId,
+                  classId: openClass.id,
+                  date: new Date().toISOString().split('T')[0],
+                  paid: link.amount,
+                  status: 'paid' as const
+              };
+          }
+      }
+
+      let updatedStudentRef: Student | null = null;
+      
+      setData(prev => {
+          let updatedStudents = [...prev.students];
+          
+          if (isNew && student) {
+              updatedStudents.push(student);
+          }
+
+          updatedStudents = updatedStudents.map(s => {
+              if (s.id === studentId) {
+                  const updated = {
+                      ...s,
+                      type: 'student' as StudentType, 
+                      status: targetClassId ? StudentStatus.ACTIVE : s.status,
+                      history: newHistoryItem ? [...s.history, newHistoryItem] : s.history
+                  };
+                  updatedStudentRef = updated;
+                  return updated;
+              }
+              return s;
+          });
+
+          let updatedClasses = prev.classes;
+          if (targetClassId) {
+              updatedClasses = prev.classes.map(c => {
+                  if (c.id === targetClassId && !c.enrolledStudentIds.includes(studentId!)) {
+                      return { ...c, enrolledStudentIds: [...c.enrolledStudentIds, studentId!] };
+                  }
+                  return c;
+              });
+          }
+
+          return {
+              ...prev,
+              students: updatedStudents,
+              classes: updatedClasses
+          };
+      });
+
+      addToast('Pagamento confirmado e matrícula realizada!', 'success');
+      
+      if (updatedStudentRef) {
+          handleUpdateStudent(updatedStudentRef); 
+          triggerAutomation('payment_confirmed', updatedStudentRef);
+          if (targetClassId) triggerAutomation('enrollment_created', updatedStudentRef);
+      }
   };
 
   if (currentView === 'public-form') {
@@ -265,21 +488,14 @@ const App: React.FC = () => {
            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
                <div className="h-2 w-full" style={{ backgroundColor: formConfig.primaryColor }}></div>
                <div className="p-8 space-y-6">
-                    <button 
-                      onClick={() => setCurrentView('form-builder')}
-                      className="mb-4 text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
-                    >
-                        ← Voltar ao Sistema
-                    </button>
+                    <button onClick={() => setCurrentView('form-builder')} className="mb-4 text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">← Voltar</button>
 
                    <div className="text-center space-y-2">
                        <h1 className="text-3xl font-bold text-gray-800">{formConfig.title}</h1>
                        <p className="text-gray-500">{formConfig.subtitle}</p>
                    </div>
 
-                   <form 
-                     className="space-y-4"
-                     onSubmit={(e) => {
+                   <form className="space-y-4" onSubmit={(e) => {
                         e.preventDefault();
                         const formData = new FormData(e.currentTarget);
                         handlePublicFormSubmit(
@@ -287,8 +503,7 @@ const App: React.FC = () => {
                             formData.get('phone') as string,
                             formData.get('course') as string
                         );
-                     }}
-                   >
+                   }}>
                        <div>
                            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">Nome Completo</label>
                            <input required name="name" type="text" className="w-full p-3 rounded-lg border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-opacity-50" style={{ '--tw-ring-color': formConfig.primaryColor } as any} />
@@ -376,6 +591,7 @@ const App: React.FC = () => {
             onShowToast={addToast}
             onEnrollStudent={handleEnrollStudent}
             onUnenrollStudent={handleUnenrollStudent}
+            onGeneratePaymentLink={handleGeneratePaymentLink}
           />
         )}
         
@@ -396,6 +612,17 @@ const App: React.FC = () => {
                 students={data.students}
                 onSaveConfig={handleSaveEvolutionConfig}
                 onSaveAutomations={handleSaveAutomations}
+                onShowToast={addToast}
+            />
+        )}
+
+        {currentView === 'payments' && (
+            <Payments 
+                links={data.paymentLinks}
+                courses={data.courses}
+                onAddLink={handleAddLink}
+                onDeleteLink={handleDeleteLink}
+                onSimulatePayment={handleSimulatePayment}
                 onShowToast={addToast}
             />
         )}

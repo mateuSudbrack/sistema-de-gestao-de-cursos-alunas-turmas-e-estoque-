@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Course, Student, CourseClass } from '../types';
-import { Clock, DollarSign, Plus, Users, BookOpen, X, TrendingUp, Calendar, CheckCircle, AlertCircle, Edit2, Save, Trash2, UserPlus } from 'lucide-react';
+import { Clock, DollarSign, Plus, Users, BookOpen, X, TrendingUp, Calendar, CheckCircle, AlertCircle, Edit2, Save, Trash2, UserPlus, Link } from 'lucide-react';
 import { ToastType } from './Toast';
 
 interface CoursesProps {
@@ -12,19 +12,20 @@ interface CoursesProps {
   onUpdateCourse: (c: Course) => void;
   onAddClass: (c: CourseClass) => void;
   onShowToast: (message: string, type: ToastType) => void;
-  onEnrollStudent: (studentId: string, classId: string, paidAmount: number) => void;
+  onEnrollStudent: (studentId: string, classId: string, paidAmount: number, isPaid: boolean) => void;
   onUnenrollStudent: (studentId: string, classId: string) => void;
+  onGeneratePaymentLink: (courseId: string) => void;
 }
 
-export default function Courses({ courses, students, classes, onAddCourse, onUpdateCourse, onAddClass, onShowToast, onEnrollStudent, onUnenrollStudent }: CoursesProps) {
+export default function Courses({ courses, students, classes, onAddCourse, onUpdateCourse, onAddClass, onShowToast, onEnrollStudent, onUnenrollStudent, onGeneratePaymentLink }: CoursesProps) {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Partial<Course>>({});
   
   // Class Management States
   const [showNewClassForm, setShowNewClassForm] = useState(false);
-  const [newClassData, setNewClassData] = useState<{date: string, endDate: string, max: number, daysOfWeek: number[]}>({ 
-      date: '', endDate: '', max: 4, daysOfWeek: [] 
+  const [newClassData, setNewClassData] = useState<{date: string, endDate: string, max: number, daysOfWeek: number[], startTime: string, endTime: string}>({ 
+      date: '', endDate: '', max: 4, daysOfWeek: [], startTime: '09:00', endTime: '17:00'
   });
   
   const [expandedClassId, setExpandedClassId] = useState<string | null>(null);
@@ -95,15 +96,19 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
         return;
     }
     
-    // Generate Schedule
+    // Generate Schedule with Times
     const start = new Date(newClassData.date + 'T00:00:00');
     const end = new Date(newClassData.endDate + 'T00:00:00');
-    const schedule: string[] = [];
+    const schedule: { date: string, startTime: string, endTime: string }[] = [];
     const loop = new Date(start);
 
     while (loop <= end) {
         if (newClassData.daysOfWeek.includes(loop.getDay())) {
-            schedule.push(loop.toISOString().split('T')[0]);
+            schedule.push({
+                date: loop.toISOString().split('T')[0],
+                startTime: newClassData.startTime,
+                endTime: newClassData.endTime
+            });
         }
         loop.setDate(loop.getDate() + 1);
     }
@@ -126,16 +131,15 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
 
     onAddClass(newClass);
     setShowNewClassForm(false);
-    setNewClassData({ date: '', endDate: '', max: 4, daysOfWeek: [] });
-    onShowToast(`Turma criada com ${schedule.length} dias de aula!`, "success");
+    setNewClassData({ date: '', endDate: '', max: 4, daysOfWeek: [], startTime: '09:00', endTime: '17:00' });
+    onShowToast(`Turma criada com ${schedule.length} aulas!`, "success");
   };
 
   const handleManualEnroll = (classId: string) => {
       if (!studentToEnroll) return;
-      // Default full price for manual enroll
-      onEnrollStudent(studentToEnroll, classId, selectedCourse?.price || 0);
+      onEnrollStudent(studentToEnroll, classId, selectedCourse?.price || 0, true);
       setStudentToEnroll('');
-      onShowToast("Aluna matriculada!", "success");
+      onShowToast("Aluna adicionada à turma!", "success");
   };
 
   return (
@@ -159,7 +163,7 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
             <div key={course.id} className="bg-white dark:bg-dark-surface rounded-2xl overflow-hidden shadow-sm border border-gray-100 dark:border-dark-border group hover:shadow-lg transition-all flex flex-col h-full hover:-translate-y-1 duration-300 relative">
               <button 
                 onClick={(e) => handleEditCourse(e, course)}
-                className="absolute top-4 right-4 z-10 bg-white/90 dark:bg-black/50 hover:bg-primary-50 dark:hover:bg-primary-900/50 text-gray-400 hover:text-primary-600 dark:text-gray-300 p-2 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 transition-colors"
+                className="absolute top-4 right-4 z-10 bg-white/90 dark:bg-slate-800/90 hover:bg-primary-50 dark:hover:bg-primary-900/50 text-gray-400 hover:text-primary-600 dark:text-gray-300 p-2 rounded-lg shadow-sm border border-gray-100 dark:border-slate-700 transition-colors"
                 title="Editar Curso"
               >
                 <Edit2 size={16} />
@@ -191,14 +195,23 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
                        Próxima: <strong>{new Date(nextClass.startDate).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}</strong>
                      </div>
                   ) : (
-                    <div className="flex items-center gap-2 text-sm bg-gray-50 dark:bg-white/5 text-gray-500 dark:text-dark-textMuted px-3 py-2 rounded-lg border border-gray-100 dark:border-dark-border">
+                    <div className="flex items-center gap-2 text-sm bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-dark-textMuted px-3 py-2 rounded-lg border border-gray-100 dark:border-dark-border">
                        <AlertCircle size={16} /> Sem turmas abertas
                     </div>
                   )}
 
-                  <div className="flex items-center gap-3 text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-white/5 p-3 rounded-xl">
-                    <DollarSign size={20} className="text-green-600 dark:text-green-400" />
-                    <span className="text-lg font-bold text-gray-800 dark:text-dark-text">{formatCurrency(course.price)}</span>
+                  <div className="flex items-center justify-between gap-3 bg-gray-50 dark:bg-slate-800 p-3 rounded-xl">
+                    <div className="flex items-center gap-2">
+                        <DollarSign size={20} className="text-green-600 dark:text-green-400" />
+                        <span className="text-lg font-bold text-gray-800 dark:text-dark-text">{formatCurrency(course.price)}</span>
+                    </div>
+                    <button 
+                        onClick={() => onGeneratePaymentLink(course.id)}
+                        className="text-primary-600 dark:text-primary-400 p-2 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
+                        title="Gerar Link de Pagamento"
+                    >
+                        <Link size={18} />
+                    </button>
                   </div>
                 </div>
 
@@ -233,7 +246,7 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
                     <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Nome do Curso</label>
                     <input 
                       type="text" 
-                      className="w-full border border-gray-200 dark:border-dark-border bg-white dark:bg-white/5 text-gray-800 dark:text-dark-text rounded-lg p-3 focus:ring-2 focus:ring-primary-200 outline-none"
+                      className="w-full border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-800 dark:text-white rounded-lg p-3 focus:ring-2 focus:ring-primary-200 outline-none"
                       placeholder="Ex: Micropigmentação Labial"
                       value={editingCourse.name}
                       onChange={e => setEditingCourse({...editingCourse, name: e.target.value})}
@@ -244,7 +257,7 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
                         <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Preço (R$)</label>
                         <input 
                         type="number" 
-                        className="w-full border border-gray-200 dark:border-dark-border bg-white dark:bg-white/5 text-gray-800 dark:text-dark-text rounded-lg p-3 focus:ring-2 focus:ring-primary-200 outline-none"
+                        className="w-full border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-800 dark:text-white rounded-lg p-3 focus:ring-2 focus:ring-primary-200 outline-none"
                         placeholder="0.00"
                         value={editingCourse.price}
                         onChange={e => setEditingCourse({...editingCourse, price: parseFloat(e.target.value)})}
@@ -254,7 +267,7 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
                         <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Duração</label>
                         <input 
                         type="text" 
-                        className="w-full border border-gray-200 dark:border-dark-border bg-white dark:bg-white/5 text-gray-800 dark:text-dark-text rounded-lg p-3 focus:ring-2 focus:ring-primary-200 outline-none"
+                        className="w-full border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-800 dark:text-white rounded-lg p-3 focus:ring-2 focus:ring-primary-200 outline-none"
                         placeholder="Ex: 30 horas"
                         value={editingCourse.duration}
                         onChange={e => setEditingCourse({...editingCourse, duration: e.target.value})}
@@ -265,7 +278,7 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
                   <div>
                     <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Descrição Breve</label>
                     <textarea 
-                      className="w-full border border-gray-200 dark:border-dark-border bg-white dark:bg-white/5 text-gray-800 dark:text-dark-text rounded-lg p-3 focus:ring-2 focus:ring-primary-200 outline-none resize-none"
+                      className="w-full border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-800 dark:text-white rounded-lg p-3 focus:ring-2 focus:ring-primary-200 outline-none resize-none"
                       rows={3}
                       placeholder="O que a aluna vai aprender..."
                       value={editingCourse.description}
@@ -345,14 +358,14 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
 
                     {/* New Class Form */}
                     {showNewClassForm && (
-                      <div className="bg-primary-50 dark:bg-primary-900/10 border border-primary-100 dark:border-primary-800/30 p-5 rounded-xl animate-in slide-in-from-top-2 shadow-inner">
+                      <div className="bg-primary-50 dark:bg-slate-800 border border-primary-100 dark:border-slate-700 p-5 rounded-xl animate-in slide-in-from-top-2 shadow-inner">
                          <h4 className="text-sm font-bold text-primary-800 dark:text-primary-300 mb-3">Gerador de Turma</h4>
-                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                             <div>
                               <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Início do Período</label>
                               <input 
                                 type="date" 
-                                className="w-full p-2 rounded-lg border border-gray-200 dark:border-dark-border dark:bg-white/5 dark:text-dark-text focus:ring-2 focus:ring-primary-200 outline-none"
+                                className="w-full p-2.5 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none transition-colors"
                                 value={newClassData.date}
                                 onChange={e => setNewClassData({...newClassData, date: e.target.value})}
                               />
@@ -361,41 +374,58 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
                               <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Fim do Período</label>
                               <input 
                                 type="date" 
-                                className="w-full p-2 rounded-lg border border-gray-200 dark:border-dark-border dark:bg-white/5 dark:text-dark-text focus:ring-2 focus:ring-primary-200 outline-none"
+                                className="w-full p-2.5 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none transition-colors"
                                 value={newClassData.endDate}
                                 onChange={e => setNewClassData({...newClassData, endDate: e.target.value})}
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Vagas</label>
+                              <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Horário Início</label>
                               <input 
-                                type="number" 
-                                className="w-full p-2 rounded-lg border border-gray-200 dark:border-dark-border dark:bg-white/5 dark:text-dark-text focus:ring-2 focus:ring-primary-200 outline-none"
-                                value={newClassData.max}
-                                onChange={e => setNewClassData({...newClassData, max: Number(e.target.value)})}
+                                type="time" 
+                                className="w-full p-2.5 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none transition-colors"
+                                value={newClassData.startTime}
+                                onChange={e => setNewClassData({...newClassData, startTime: e.target.value})}
                               />
                             </div>
-                            <div className="col-span-1 md:col-span-3">
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Horário Fim</label>
+                              <input 
+                                type="time" 
+                                className="w-full p-2.5 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none transition-colors"
+                                value={newClassData.endTime}
+                                onChange={e => setNewClassData({...newClassData, endTime: e.target.value})}
+                              />
+                            </div>
+                            <div className="col-span-1 lg:col-span-4">
                                 <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-2">Dias de Aula (Cronograma)</label>
                                 <div className="flex gap-2 flex-wrap">
                                     {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day, idx) => (
                                         <button 
                                             key={day}
                                             onClick={() => toggleDayOfWeek(idx)}
-                                            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors border ${newClassData.daysOfWeek.includes(idx) ? 'bg-primary-500 text-white border-primary-600' : 'bg-white dark:bg-white/5 text-gray-600 dark:text-dark-text border-gray-200 dark:border-dark-border hover:bg-gray-50'}`}
+                                            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors border ${newClassData.daysOfWeek.includes(idx) ? 'bg-primary-500 text-white border-primary-600' : 'bg-white dark:bg-slate-700 text-gray-600 dark:text-dark-text border-gray-200 dark:border-slate-600 hover:bg-gray-50'}`}
                                         >
                                             {day}
                                         </button>
                                     ))}
                                 </div>
-                                <p className="text-[10px] text-gray-400 mt-1">As aulas serão geradas automaticamente nesses dias entre as datas selecionadas.</p>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Vagas</label>
+                              <input 
+                                type="number" 
+                                className="w-full p-2.5 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none transition-colors"
+                                value={newClassData.max}
+                                onChange={e => setNewClassData({...newClassData, max: Number(e.target.value)})}
+                              />
                             </div>
                          </div>
                          <button 
                             onClick={handleCreateClass}
                             className="w-full bg-primary-500 text-white font-bold py-2 rounded-lg hover:bg-primary-600 transition-colors shadow-sm"
                          >
-                           Gerar Cronograma e Criar
+                           Gerar Cronograma e Criar Turma
                          </button>
                       </div>
                     )}
@@ -403,7 +433,7 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
                     {/* Active/Open Classes List */}
                     <div className="space-y-3">
                       {getCourseStats(selectedCourse.id).courseClasses.length === 0 ? (
-                        <div className="text-center py-10 bg-gray-50 dark:bg-white/5 rounded-xl border border-dashed border-gray-200 dark:border-dark-border">
+                        <div className="text-center py-10 bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed border-gray-200 dark:border-slate-700">
                           <Calendar size={32} className="mx-auto text-gray-300 dark:text-gray-600 mb-2"/>
                           <p className="text-gray-400 dark:text-dark-textMuted text-sm">Nenhuma turma cadastrada para este curso.</p>
                         </div>
@@ -417,7 +447,7 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
                             const isExpanded = expandedClassId === c.id;
 
                             return (
-                              <div key={c.id} className={`border rounded-xl overflow-hidden transition-all ${isExpanded ? 'ring-2 ring-primary-100 dark:ring-primary-900/30' : ''} ${isPast ? 'bg-gray-50 dark:bg-white/5 border-gray-100 dark:border-dark-border' : 'bg-white dark:bg-dark-surface border-gray-200 dark:border-dark-border shadow-sm'}`}>
+                              <div key={c.id} className={`border rounded-xl overflow-hidden transition-all ${isExpanded ? 'ring-2 ring-primary-100 dark:ring-primary-900/30' : ''} ${isPast ? 'bg-gray-50 dark:bg-slate-800 border-gray-100 dark:border-slate-700' : 'bg-white dark:bg-dark-surface border-gray-200 dark:border-slate-700 shadow-sm'}`}>
                                 <div 
                                     className="p-4 cursor-pointer"
                                     onClick={() => setExpandedClassId(isExpanded ? null : c.id)}
@@ -429,7 +459,7 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
                                             Turma {new Date(c.startDate).toLocaleDateString('pt-BR')}
                                         </span>
                                         <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
-                                            c.status === 'completed' ? 'bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300' :
+                                            c.status === 'completed' ? 'bg-gray-200 dark:bg-slate-700 border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300' :
                                             isPast ? 'bg-amber-100 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/30 text-amber-700 dark:text-amber-400' :
                                             'bg-green-100 dark:bg-green-900/20 border-green-200 dark:border-green-800/30 text-green-700 dark:text-green-400'
                                         }`}>
@@ -457,7 +487,7 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
                                 </div>
 
                                 {isExpanded && (
-                                    <div className="bg-gray-50 dark:bg-black/20 border-t border-gray-100 dark:border-dark-border p-4 animate-in slide-in-from-top-2">
+                                    <div className="bg-gray-50 dark:bg-slate-800/50 border-t border-gray-100 dark:border-slate-700 p-4 animate-in slide-in-from-top-2">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             {/* Student List */}
                                             <div>
@@ -465,10 +495,16 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
                                                 <div className="space-y-2 mb-3">
                                                     {c.enrolledStudentIds.map(sid => {
                                                         const s = students.find(st => st.id === sid);
+                                                        const history = s?.history.find(h => h.courseId === c.courseId);
                                                         if (!s) return null;
                                                         return (
-                                                            <div key={sid} className="flex justify-between items-center bg-white dark:bg-dark-surface p-2 rounded border border-gray-200 dark:border-dark-border">
-                                                                <div className="text-sm font-medium text-gray-800 dark:text-dark-text">{s.name}</div>
+                                                            <div key={sid} className="flex justify-between items-center bg-white dark:bg-dark-surface p-2 rounded border border-gray-200 dark:border-slate-600">
+                                                                <div>
+                                                                    <div className="text-sm font-medium text-gray-800 dark:text-dark-text">{s.name}</div>
+                                                                    <div className={`text-[10px] font-bold ${history?.status === 'paid' ? 'text-green-500' : 'text-amber-500'}`}>
+                                                                        {history?.status === 'paid' ? 'Pago' : 'Pendente'}
+                                                                    </div>
+                                                                </div>
                                                                 <button 
                                                                     onClick={() => onUnenrollStudent(sid, c.id)}
                                                                     className="text-gray-400 hover:text-red-500 p-1" title="Remover da turma"
@@ -483,14 +519,14 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
 
                                                 <div className="flex gap-2">
                                                     <select 
-                                                        className="flex-1 text-xs p-2 rounded border border-gray-300 dark:border-dark-border bg-white dark:bg-dark-surface text-gray-800 dark:text-dark-text"
+                                                        className="flex-1 text-xs p-2 rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-800 dark:text-white"
                                                         value={studentToEnroll}
                                                         onChange={e => setStudentToEnroll(e.target.value)}
                                                     >
-                                                        <option value="">Adicionar aluna...</option>
+                                                        <option value="">Adicionar aluna existente...</option>
                                                         {students
                                                             .filter(s => !c.enrolledStudentIds.includes(s.id))
-                                                            .map(s => <option key={s.id} value={s.id}>{s.name}</option>)
+                                                            .map(s => <option key={s.id} value={s.id}>{s.name} ({s.type === 'lead' ? 'Lead' : 'Aluna'})</option>)
                                                         }
                                                     </select>
                                                     <button 
@@ -506,12 +542,13 @@ export default function Courses({ courses, students, classes, onAddCourse, onUpd
                                             {/* Schedule List */}
                                             <div>
                                                 <h5 className="text-xs font-bold text-gray-500 dark:text-dark-textMuted uppercase tracking-wider mb-2">Cronograma de Aulas</h5>
-                                                <div className="flex flex-wrap gap-2">
+                                                <div className="flex flex-col gap-1">
                                                     {c.schedule && c.schedule.length > 0 ? (
-                                                        c.schedule.map(date => (
-                                                            <span key={date} className="text-xs bg-white dark:bg-dark-surface border border-gray-200 dark:border-dark-border px-2 py-1 rounded text-gray-600 dark:text-gray-300 font-mono">
-                                                                {new Date(date).toLocaleDateString('pt-BR', {day: '2-digit', month:'2-digit'})}
-                                                            </span>
+                                                        c.schedule.map((item, idx) => (
+                                                            <div key={idx} className="text-xs bg-white dark:bg-dark-surface border border-gray-200 dark:border-slate-600 px-2 py-1.5 rounded text-gray-600 dark:text-gray-300 flex justify-between">
+                                                                <span className="font-bold">{new Date(item.date).toLocaleDateString('pt-BR', {weekday: 'short', day: '2-digit', month:'2-digit'})}</span>
+                                                                <span>{item.startTime} - {item.endTime}</span>
+                                                            </div>
                                                         ))
                                                     ) : (
                                                         <span className="text-xs text-gray-400 italic">Sem datas específicas definidas.</span>

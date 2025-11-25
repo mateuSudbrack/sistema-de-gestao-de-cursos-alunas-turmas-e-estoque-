@@ -32,13 +32,7 @@ const Agenda: React.FC<AgendaProps> = ({ classes, students, courses }) => {
   };
 
   const events = useMemo(() => {
-    const items: { date: string, type: 'class' | 'followup', title: string, id: string, details: string, colorClass: string, isStart?: boolean, isEnd?: boolean, dayIndex?: number, duration?: number }[] = [];
-
-    // Helper to parse local YYYY-MM-DD to Date
-    const parseDate = (str: string) => {
-      const [y, m, d] = str.split('-').map(Number);
-      return new Date(y, m - 1, d);
-    };
+    const items: { date: string, type: 'class' | 'followup', title: string, id: string, details: string, colorClass: string, time?: string }[] = [];
 
     // Add Classes
     classes.forEach(c => {
@@ -46,43 +40,18 @@ const Agenda: React.FC<AgendaProps> = ({ classes, students, courses }) => {
       const colorClass = getCourseColor(c.courseId);
 
       if (c.schedule && c.schedule.length > 0) {
-          // New Logic: specific dates
-          c.schedule.forEach((dateStr, idx) => {
+          // Specific dates
+          c.schedule.forEach((scheduleItem, idx) => {
               items.push({
-                  date: dateStr,
+                  date: scheduleItem.date,
                   type: 'class',
                   title: course?.name || 'Turma',
-                  id: `${c.id}-${dateStr}`,
+                  id: `${c.id}-${scheduleItem.date}-${idx}`,
                   details: `${c.enrolledStudentIds.length}/${c.maxStudents} alunas`,
                   colorClass: colorClass,
-                  isStart: idx === 0,
-                  isEnd: idx === c.schedule!.length - 1
+                  time: `${scheduleItem.startTime}-${scheduleItem.endTime}`
               });
           });
-      } else {
-        // Fallback Logic: Range
-        const startDate = parseDate(c.startDate);
-        const endDate = c.endDate ? parseDate(c.endDate) : startDate;
-        
-        const loopDate = new Date(startDate);
-        let dayCounter = 0;
-        
-        while (loopDate <= endDate) {
-            const dateStr = loopDate.toISOString().split('T')[0];
-            items.push({
-            date: dateStr,
-            type: 'class',
-            title: course?.name || 'Turma',
-            id: `${c.id}-${dateStr}`, 
-            details: `${c.enrolledStudentIds.length}/${c.maxStudents}`,
-            colorClass: colorClass,
-            isStart: dayCounter === 0,
-            isEnd: loopDate.getTime() === endDate.getTime(),
-            dayIndex: dayCounter
-            });
-            loopDate.setDate(loopDate.getDate() + 1);
-            dayCounter++;
-        }
       }
     });
 
@@ -167,13 +136,15 @@ const Agenda: React.FC<AgendaProps> = ({ classes, students, courses }) => {
                       `}
                       title={`${ev.title} - ${ev.details}`}
                     >
-                      <div className="truncate flex justify-between items-center">
-                        <span className="truncate">
-                            {ev.type === 'followup' && <User size={10} className="inline mr-1"/>}
-                            {ev.title}
-                        </span>
-                        {ev.type === 'class' && (
-                            <span className="text-[9px] opacity-80 ml-1">{ev.details}</span>
+                      <div className="flex flex-col">
+                        <div className="flex justify-between items-center">
+                            <span className="truncate font-bold">
+                                {ev.type === 'followup' && <User size={10} className="inline mr-1"/>}
+                                {ev.title}
+                            </span>
+                        </div>
+                        {ev.type === 'class' && ev.time && (
+                            <span className="text-[9px] opacity-80">{ev.time}</span>
                         )}
                       </div>
                     </div>
@@ -183,69 +154,6 @@ const Agenda: React.FC<AgendaProps> = ({ classes, students, courses }) => {
             );
           })}
         </div>
-      </div>
-
-      {/* List View for Mobile/Quick Access */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-         <div className="bg-white dark:bg-dark-surface p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-dark-border">
-            <h3 className="font-bold text-gray-800 dark:text-dark-text mb-4 flex items-center gap-2">
-               <Clock size={18} className="text-primary-500"/> Próximas Turmas
-            </h3>
-            <div className="space-y-3">
-               {classes
-                 .filter(c => new Date(c.startDate) >= new Date())
-                 .sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
-                 .slice(0, 5)
-                 .map(c => {
-                    const course = courses.find(co => co.id === c.courseId);
-                    return (
-                       <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-dark-border">
-                          <div className="bg-white dark:bg-dark-surface p-2 rounded-lg text-center min-w-[50px] shadow-sm">
-                             <div className="text-xs text-gray-500 dark:text-dark-textMuted uppercase">{new Date(c.startDate).toLocaleDateString('pt-BR', {month:'short'})}</div>
-                             <div className="text-lg font-bold text-gray-800 dark:text-dark-text">{new Date(c.startDate).getDate()}</div>
-                          </div>
-                          <div>
-                             <div className="font-bold text-gray-800 dark:text-dark-text text-sm">{course?.name}</div>
-                             <div className="text-xs text-gray-500 dark:text-dark-textMuted">
-                               {c.schedule?.length ? `${c.schedule.length} dias de aula` : 'Datas a definir'}
-                             </div>
-                          </div>
-                       </div>
-                    )
-                 })}
-               {classes.filter(c => new Date(c.startDate) >= new Date()).length === 0 && (
-                  <p className="text-gray-400 dark:text-dark-textMuted text-sm italic">Nenhuma turma futura agendada.</p>
-               )}
-            </div>
-         </div>
-
-         <div className="bg-white dark:bg-dark-surface p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-dark-border">
-            <h3 className="font-bold text-gray-800 dark:text-dark-text mb-4 flex items-center gap-2">
-               <User size={18} className="text-amber-500"/> Follow-ups Pendentes
-            </h3>
-            <div className="space-y-3">
-               {students
-                 .filter(s => s.nextFollowUp && new Date(s.nextFollowUp) <= new Date())
-                 .slice(0, 5)
-                 .map(s => (
-                    <div key={s.id} className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30">
-                       <div className="flex items-center gap-3">
-                          <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
-                          <div>
-                             <div className="font-bold text-gray-800 dark:text-dark-text text-sm">{s.name}</div>
-                             <div className="text-xs text-amber-700 dark:text-amber-400">Data: {new Date(s.nextFollowUp).toLocaleDateString('pt-BR')}</div>
-                          </div>
-                       </div>
-                       <a href={`https://wa.me/55${s.phone}`} target="_blank" rel="noreferrer" className="text-xs font-bold bg-amber-200 dark:bg-amber-700 text-amber-800 dark:text-amber-100 px-2 py-1 rounded-md">
-                          Cobrar
-                       </a>
-                    </div>
-                 ))}
-                 {students.filter(s => s.nextFollowUp && new Date(s.nextFollowUp) <= new Date()).length === 0 && (
-                  <p className="text-gray-400 dark:text-dark-textMuted text-sm italic">Tudo em dia!</p>
-               )}
-            </div>
-         </div>
       </div>
     </div>
   );
