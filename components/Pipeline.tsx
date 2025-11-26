@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Student, StudentStatus, Course, PipelineDefinition, PipelineStage } from '../types';
 import { Phone, MessageCircle, GripVertical, Settings, Plus, Trash2, X, Check, Edit2, ArrowLeft } from 'lucide-react';
 import { ToastType } from './Toast';
+import { v4 } from 'uuid';
 
 interface PipelineProps {
   students: Student[];
@@ -102,15 +103,15 @@ const Pipeline: React.FC<PipelineProps> = ({
 
   // Manager Logic
   const handleCreatePipeline = () => {
-      const newId = crypto.randomUUID();
+      const newId = v4();
       const newPipeline: PipelineDefinition = {
           id: newId,
           name: 'Novo Pipeline',
           isSystem: false,
           stages: [
-              { id: crypto.randomUUID(), name: 'Triagem', color: '#9ca3af', order: 1 },
-              { id: crypto.randomUUID(), name: 'Em Andamento', color: '#3b82f6', order: 2 },
-              { id: crypto.randomUUID(), name: 'Concluído', color: '#22c55e', order: 3 }
+              { id: v4(), name: 'Triagem', color: '#9ca3af', order: 1 },
+              { id: v4(), name: 'Em Andamento', color: '#3b82f6', order: 2 },
+              { id: v4(), name: 'Concluído', color: '#22c55e', order: 3 }
           ]
       };
       onAddPipeline(newPipeline);
@@ -324,7 +325,7 @@ const Pipeline: React.FC<PipelineProps> = ({
                                             <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted">Estágios</label>
                                             {!pipelines.find(p => p.id === editingPipelineId)?.isSystem && (
                                                 <button 
-                                                    onClick={() => setEditingStages([...editingStages, { id: crypto.randomUUID(), name: 'Novo Estágio', color: '#9ca3af', order: editingStages.length + 1 }])}
+                                                    onClick={() => setEditingStages([...editingStages, { id: v4(), name: 'Novo Estágio', color: '#9ca3af', order: editingStages.length + 1 }])}
                                                     className="text-xs flex items-center gap-1 text-primary-600 hover:text-primary-700"
                                                 >
                                                     <Plus size={12}/> Adicionar

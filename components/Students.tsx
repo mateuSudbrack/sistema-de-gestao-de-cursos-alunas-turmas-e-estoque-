@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Student, StudentStatus, Course, CourseClass, StudentType } from '../types';
 import { Search, Plus, Phone, Edit2, MessageCircle, Sparkles, X, Save, Calendar, DollarSign, Trash2, CheckCircle, ShoppingBag, Trophy, User, Crown, Filter } from 'lucide-react';
-import { generateFollowUpMessage } from '../services/geminiService';
 import { ToastType } from './Toast';
+import { v4 } from 'uuid';
 
 interface StudentsProps {
   students: Student[];
@@ -20,8 +20,6 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalTab, setModalTab] = useState<'info' | 'history'>('info');
   const [editingStudent, setEditingStudent] = useState<Partial<Student> | null>(null);
-  const [aiMessage, setAiMessage] = useState<{ studentId: string, text: string } | null>(null);
-  const [loadingAi, setLoadingAi] = useState(false);
   
   // Enroll States
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -49,7 +47,7 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
 
   const handleNewStudent = () => {
     setEditingStudent({
-      id: crypto.randomUUID(),
+      id: v4(),
       name: '',
       phone: '',
       photo: '',
@@ -139,17 +137,6 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
     // Don't close modal immediately, let them see update
     setModalTab('history');
     setSelectedClassId('');
-  };
-
-  const handleGenerateAiMessage = async (student: Student) => {
-    setLoadingAi(true);
-    setAiMessage(null);
-    const interestName = student.interestedIn.length > 0 
-      ? courses.find(c => c.id === student.interestedIn[0])?.name || 'nossos cursos'
-      : 'nossos cursos';
-    const text = await generateFollowUpMessage(student.name, interestName, student.lastContact);
-    setAiMessage({ studentId: student.id, text });
-    setLoadingAi(false);
   };
 
   const getPaidEnrollmentCount = (s: Student) => s.history.filter(h => h.status === 'paid').length;
@@ -283,45 +270,9 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
                 <MessageCircle size={16} /> WhatsApp
               </a>
               
-              <button 
-                onClick={() => handleGenerateAiMessage(student)}
-                className="flex-1 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 text-indigo-600 dark:text-indigo-400 hover:from-indigo-100 hover:to-purple-100 rounded-lg flex items-center justify-center gap-1.5 font-medium transition-all border border-indigo-100 dark:border-indigo-900/30 py-2 text-sm"
-                disabled={loadingAi}
-              >
-                {loadingAi && aiMessage?.studentId !== student.id ? (
-                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-indigo-600"></div>
-                ) : (
-                  <Sparkles size={16} />
-                )}
-                IA Sugestão
-              </button>
             </div>
 
             {/* AI Message Popover */}
-            {aiMessage?.studentId === student.id && (
-              <div className="absolute bottom-full left-0 right-0 mb-2 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-slate-700 rounded-xl shadow-xl p-3 z-20 animate-in fade-in slide-in-from-bottom-2">
-                <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1"><Sparkles size={12}/> Sugestão</h4>
-                  <button onClick={() => setAiMessage(null)} className="text-gray-300 hover:text-gray-500"><X size={14}/></button>
-                </div>
-                <textarea 
-                  readOnly 
-                  className="w-full text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-slate-900 rounded-lg p-2 mb-2 resize-none focus:outline-none"
-                  rows={3}
-                  value={aiMessage.text}
-                />
-                <button 
-                  onClick={() => {
-                    navigator.clipboard.writeText(aiMessage.text);
-                    setAiMessage(null);
-                    window.open(`https://wa.me/55${student.phone.replace(/\D/g,'')}?text=${encodeURIComponent(aiMessage.text)}`, '_blank');
-                  }}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-1.5 rounded-lg transition-colors"
-                >
-                  Copiar e Abrir Zap
-                </button>
-              </div>
-            )}
           </div>
           )
         })}

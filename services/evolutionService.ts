@@ -1,5 +1,6 @@
 
 import { EvolutionConfig } from '../types';
+import { v4 } from 'uuid';
 
 // Helper to standardize URL
 const normalizeUrl = (url: string) => {
@@ -20,7 +21,7 @@ export const evolutionService = {
         },
         body: JSON.stringify({
           instanceName: name,
-          token: crypto.randomUUID(), 
+          token: v4(), 
           qrcode: true,
           integration: "WHATSAPP-BAILEYS"
         })

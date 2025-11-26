@@ -1,0 +1,7 @@
+{
+  "success": false,
+  "errors": "You are using Node.js 20.10.0. Vite requires Node.js version 20.19+ or 22.12+. Please upgrade your Node.js version.\nfailed to load config from /home/ubuntu/labs/sistema-de-gestao-de-cursos-alunas-turmas-e-estoque-/vite.config.ts\nerror during build:\nError [ERR_MODULE_NOT_FOUND]: Cannot find package 'vite' imported from /home/ubuntu/node_modules/.vite-temp/vite.config.ts.timestamp-1764109162269-90af80962a525.mjs\n    at packageResolve (node:internal/modules/esm/resolve:844:9)\n    at moduleResolve (node:internal/modules/esm/resolve:901:20)\n    at defaultResolve (node:internal/modules/esm/resolve:1121:11)\n    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:396:12)\n    at ModuleLoader.resolve (node:internal/modules/esm/loader:365:25)\n    at ModuleLoader.getModuleJob (node:internal/modules/esm/loader:240:38)\n    at ModuleWrap.<anonymous> (node:internal/modules/esm/module_job:85:39)\n    at link (node:internal/modules/esm/module_job:84:36)\n",
+  "timestamp": "2025-11-25 19:19:22",
+  "vite_ruby": "3.8.0",
+  "digest": "832944aa8ceedd4a7d52e26dd3e909bd62bf77eb"
+}

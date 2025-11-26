@@ -10,10 +10,10 @@ app.use(express.json());
 app.use(cors());
 
 // --- CONFIGURAÇÃO ---
-const PORT = process.env.PORT || 3000;
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL;
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
-const INSTANCE_NAME = process.env.INSTANCE_NAME;
+const PORT = process.env.PORT || 3002;
+const EVOLUTION_API_URL = 'https://wppconnect.digiyou.com.br';
+const EVOLUTION_API_KEY = 'BQYHJGJHJ';
+const INSTANCE_NAME = 'teste';
 
 // Configuração do Banco de Dados Postgres
 const pool = new Pool({
@@ -44,6 +44,12 @@ async function fetchProfilePicture(remoteJid) {
         return null;
     }
 }
+
+// Helper to validate UUID format
+const isValidUUID = (uuid) => {
+    const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuid && regex.test(uuid);
+};
 
 // --- ROTA DE SINCRONIZAÇÃO TOTAL (Ao abrir o App) ---
 app.get('/sync', async (req, res) => {
@@ -114,7 +120,7 @@ app.post('/students', async (req, res) => {
         `;
         
         const values = [
-            s.id || uuidv4(), s.name, phone, s.email || null, s.photo || null,
+            isValidUUID(s.id) ? s.id : uuidv4(), s.name, phone, s.email || null, s.photo || null,
             s.type || 'lead', s.status || 'Interessado', s.pipelineId, s.stageId,
             s.interestedIn || [], JSON.stringify(s.history || []),
             s.lastContact, s.nextFollowUp, s.lastPurchase, s.notes || ''

@@ -1,0 +1,15 @@
+:80
+
+root * /home/ubuntu/labs/sistema-de-gestao-de-cursos-alunas-turmas-e-estoque-/dist
+
+@api_paths {
+    path /sync
+    path /sync/*
+    path /students
+    path /students/*
+    # Adicione outras rotas de API aqui se necessário
+}
+
+reverse_proxy @api_paths http://localhost:6667
+
+file_server

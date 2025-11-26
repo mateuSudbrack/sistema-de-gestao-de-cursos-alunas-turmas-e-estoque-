@@ -13,25 +13,31 @@ import Messages from './components/Messages';
 import Payments from './components/Payments';
 import ToastContainer, { ToastMessage, ToastType } from './components/Toast';
 import { evolutionService } from './services/evolutionService';
+import { v4 } from 'uuid';
 
 // URL da API Backend
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://168.138.249.20:3002';
 
 const App: React.FC = () => {
+  console.log('Rendering App component');
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [loading, setLoading] = useState(true);
   
   // Estado Inicial
   const [data, setData] = useState<AppState>(INITIAL_DATA);
 
+  console.log('Current state:', { loading, currentView, theme: data.theme });
+
   // --- 1. CARREGAR DADOS DO SERVIDOR AO INICIAR ---
   useEffect(() => {
     const fetchData = async () => {
+      console.log('Calling fetchData');
       try {
         console.log(`📡 Conectando ao servidor ${API_BASE_URL}...`);
         const res = await fetch(`${API_BASE_URL}/sync`);
         
         if (res.ok) {
+          console.log('Fetch successful');
           const json = await res.json();
           const dbStudents = json.students || [];
           const globalData = json.global || {};
@@ -76,6 +82,7 @@ const App: React.FC = () => {
       } catch (e) {
         console.error("⚠️ Falha de conexão. Servidor offline ou CORS bloqueado.", e);
       } finally {
+        console.log('Setting loading to false');
         setLoading(false);
       }
     };
@@ -144,7 +151,7 @@ const App: React.FC = () => {
   // Toast System
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const addToast = (message: string, type: ToastType = 'info') => {
-    const id = crypto.randomUUID();
+    const id = v4();
     setToasts(prev => [...prev, { id, type, message }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
@@ -212,7 +219,7 @@ const App: React.FC = () => {
     const finalTotal = Math.max(0, saleSubtotal - discount);
 
     const newSale = {
-      id: crypto.randomUUID(),
+      id: v4(),
       studentId,
       date: new Date().toISOString().split('T')[0],
       items: items.map(i => ({ ...i, priceAtSale: data.products.find(p => p.id === i.productId)?.sellPrice || 0 })),
@@ -289,7 +296,7 @@ const App: React.FC = () => {
 
   const handlePublicFormSubmit = (name: string, phone: string, courseId: string) => {
       const newStudent: Student = {
-          id: crypto.randomUUID(),
+          id: v4(),
           name,
           phone,
           type: 'lead',
@@ -373,7 +380,7 @@ const App: React.FC = () => {
       if(!course) return;
 
       const link: PaymentLink = {
-          id: crypto.randomUUID(),
+          id: v4(),
           title: course.name,
           description: `Matrícula para ${course.name}`,
           amount: course.price,
@@ -398,7 +405,7 @@ const App: React.FC = () => {
       if (!student) {
           isNew = true;
           student = {
-              id: crypto.randomUUID(),
+              id: v4(),
               name: customerName,
               phone: customerPhone,
               type: 'lead' as StudentType,

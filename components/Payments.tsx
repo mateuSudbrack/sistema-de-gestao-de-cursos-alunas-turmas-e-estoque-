@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PaymentLink, Course } from '../types';
 import { CreditCard, QrCode, Plus, Copy, Trash2, ExternalLink, Smartphone, CheckCircle, Lock } from 'lucide-react';
 import { ToastType } from './Toast';
+import { v4 } from 'uuid';
 
 interface PaymentsProps {
   links: PaymentLink[];
@@ -26,7 +27,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, onAddLink, onDelete
     if(!newLink.title || !newLink.amount) return onShowToast('Preencha título e valor.', 'error');
     
     const link: PaymentLink = {
-        id: crypto.randomUUID(),
+        id: v4(),
         title: newLink.title,
         description: newLink.description || '',
         amount: newLink.amount,

@@ -3,6 +3,7 @@ import { EvolutionConfig, Student, AutomationConfig, AutomationRule, AutomationT
 import { evolutionService } from '../services/evolutionService';
 import { QrCode, RefreshCw, Send, Users, Zap, MessageCircle, Plus, Trash2 } from 'lucide-react';
 import { ToastType } from './Toast';
+import { v4 } from 'uuid';
 
 interface MessagesProps {
   config: EvolutionConfig;
@@ -83,7 +84,7 @@ const Messages: React.FC<MessagesProps> = ({ config, automations, students, onSa
   const handleAddRule = () => {
       if(!newRule.name || !newRule.message) return onShowToast('Preencha nome e mensagem.', 'error');
       const rule: AutomationRule = {
-          id: crypto.randomUUID(),
+          id: v4(),
           name: newRule.name,
           trigger: newRule.trigger,
           message: newRule.message,
