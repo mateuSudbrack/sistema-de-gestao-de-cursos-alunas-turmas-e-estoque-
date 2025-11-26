@@ -16,7 +16,7 @@ import { evolutionService } from './services/evolutionService';
 import { v4 } from 'uuid';
 
 // URL da API Backend
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'httpS://certificados.digiyou.com.br/api/services';
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'https://certificados.digiyou.com.br/api/service';
 
 const App: React.FC = () => {
   console.log('Rendering App component');
