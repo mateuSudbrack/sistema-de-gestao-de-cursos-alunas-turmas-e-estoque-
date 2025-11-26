@@ -7,7 +7,10 @@ require('dotenv').config();
 
 const app = express();
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin: 'https://sistema-de-gestao-de-cursos-alunas-three.vercel.app',
+    credentials: true
+}));
 
 // --- CONFIGURAÇÃO ---
 const PORT = process.env.PORT || 3002;
@@ -79,7 +82,7 @@ app.post('/sync/global', async (req, res) => {
             `INSERT INTO app_settings (key, data, "updatedAt") 
              VALUES ('GLOBAL_STATE', $1, NOW())
              ON CONFLICT (key) DO UPDATE SET data = $1, "updatedAt" = NOW()`,
-            [JSON.stringify(data)]
+            [data]
         );
         res.json({ success: true });
     } catch (err) {
