@@ -104,8 +104,9 @@ app.post('/students', async (req, res) => {
                 "pipelineId", "stageId", "interestedIn", history, 
                 "lastContact", "nextFollowUp", "lastPurchase", notes, "updatedAt"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
-            ON CONFLICT (phone) DO UPDATE SET
+            ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
+                phone = EXCLUDED.phone,
                 email = EXCLUDED.email,
                 photo = COALESCE(EXCLUDED.photo, students.photo),
                 type = EXCLUDED.type,
@@ -123,17 +124,36 @@ app.post('/students', async (req, res) => {
         `;
         
         const values = [
-            isValidUUID(s.id) ? s.id : uuidv4(), s.name, phone, s.email || null, s.photo || null,
-            s.type || 'lead', s.status || 'Interessado', s.pipelineId, s.stageId,
-            s.interestedIn || [], JSON.stringify(s.history || []),
-            s.lastContact, s.nextFollowUp, s.lastPurchase, s.notes || ''
+            isValidUUID(s.id) ? s.id : uuidv4(),
+            s.name,
+            phone,
+            s.email || null,
+            s.photo || null,
+            s.type || 'lead',
+            s.status || 'Interessado',
+            isValidUUID(s.pipelineId) ? s.pipelineId : null,
+            isValidUUID(s.stageId) ? s.stageId : null,
+            s.interestedIn || [],
+            JSON.stringify(s.history || []),
+            s.lastContact ? s.lastContact : null,
+            s.nextFollowUp ? s.nextFollowUp : null,
+            s.lastPurchase ? s.lastPurchase : null,
+            s.notes || ''
         ];
 
         const result = await client.query(query, values);
         res.json(result.rows[0]);
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: err.message });
+        console.error('---!!!! ERRO DETALHADO NA ROTA /students !!!!---');
+        console.error('Timestamp:', new Date().toISOString());
+        console.error('Request Body (s):', req.body);
+        console.error('Erro Completo:', err);
+        console.error('---!!!! FIM DO ERRO DETALHADO !!!!---');
+        res.status(500).json({
+            error: 'Erro interno ao processar a requisição.',
+            details: err.message,
+            code: err.code || 'UNKNOWN'
+        });
     } finally {
         client.release();
     }
