@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import { Product, Student, ProductCategory } from '../types';
-import { Search, ShoppingCart, AlertTriangle, Plus, Minus, Tag, Box, Store } from 'lucide-react';
+import { Search, ShoppingCart, AlertTriangle, Plus, Minus, Tag, Box, Store, Trash2 } from 'lucide-react';
 import { ToastType } from './Toast';
 
 interface InventoryProps {
   products: Product[];
   students: Student[];
   onUpdateStock: (id: string, qty: number) => void;
+  onDeleteProduct: (id: string) => void;
   onRecordSale: (studentId: string, items: {productId: string, qty: number}[], discount: number) => void;
   onShowToast: (message: string, type: ToastType) => void;
 }
 
-const Inventory: React.FC<InventoryProps> = ({ products, students, onUpdateStock, onRecordSale, onShowToast }) => {
+const Inventory: React.FC<InventoryProps> = ({ products, students, onUpdateStock, onDeleteProduct, onRecordSale, onShowToast }) => {
   const [activeTab, setActiveTab] = useState<ProductCategory>('retail');
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<{productId: string, qty: number}[]>([]);
@@ -133,22 +134,32 @@ const Inventory: React.FC<InventoryProps> = ({ products, students, onUpdateStock
                     </span>
                   </td>
                   <td className="p-4 text-right">
-                    {activeTab === 'retail' ? (
-                        <button 
-                        onClick={() => addToCart(product)}
-                        disabled={product.quantity === 0}
-                        className="bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 text-primary-600 dark:text-primary-400 px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95"
-                        >
-                        + Vender
-                        </button>
-                    ) : (
-                        <button 
-                        disabled
-                        className="text-gray-400 dark:text-gray-600 px-4 py-2 text-sm cursor-default"
-                        >
-                        Uso Interno
-                        </button>
-                    )}
+                    <div className="flex justify-end items-center gap-2">
+                      {activeTab === 'retail' ? (
+                          <button 
+                          onClick={() => addToCart(product)}
+                          disabled={product.quantity <= 0}
+                          className="bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 text-primary-600 dark:text-primary-400 px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95"
+                          >
+                          + Vender
+                          </button>
+                      ) : (
+                          <span className="text-gray-400 dark:text-gray-600 px-4 py-2 text-sm">
+                          Uso Interno
+                          </span>
+                      )}
+                      <button 
+                        onClick={() => {
+                          if(window.confirm(`Deseja realmente remover "${product.name}" do estoque?`)) {
+                            onDeleteProduct(product.id);
+                          }
+                        }}
+                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                        title="Excluir Item"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

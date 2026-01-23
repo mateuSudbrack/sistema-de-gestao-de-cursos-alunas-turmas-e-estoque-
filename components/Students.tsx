@@ -10,11 +10,12 @@ interface StudentsProps {
   classes: CourseClass[];
   onAddStudent: (s: Student) => void;
   onUpdateStudent: (s: Student) => void;
+  onDeleteStudent: (id: string) => void;
   onEnrollStudent: (studentId: string, classId: string, paidAmount: number, isPaid: boolean) => void;
   onShowToast: (message: string, type: ToastType) => void;
 }
 
-const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddStudent, onUpdateStudent, onEnrollStudent, onShowToast }) => {
+const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddStudent, onUpdateStudent, onDeleteStudent, onEnrollStudent, onShowToast }) => {
   const [activeTab, setActiveTab] = useState<StudentType>('student'); // 'lead' | 'student'
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -514,11 +515,28 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
               )}
             </div>
 
-            <div className="p-4 border-t border-gray-100 dark:border-dark-border bg-gray-50 dark:bg-dark-surface flex justify-end gap-3 shrink-0">
-              <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 rounded-lg font-medium transition-colors">Cancelar</button>
-              <button onClick={handleSave} className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium shadow-md flex items-center gap-2 transition-colors">
-                <Save size={18} /> Salvar
-              </button>
+            <div className="p-4 border-t border-gray-100 dark:border-dark-border bg-gray-50 dark:bg-dark-surface flex justify-between gap-3 shrink-0">
+              <div>
+                {students.find(s => s.id === editingStudent.id) && (
+                  <button 
+                    onClick={() => {
+                      if(window.confirm('Tem certeza que deseja apagar este contato?')) {
+                        onDeleteStudent(editingStudent.id!);
+                        setIsModalOpen(false);
+                      }
+                    }}
+                    className="px-4 py-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-medium transition-colors flex items-center gap-2"
+                  >
+                    <Trash2 size={18} /> Apagar
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 rounded-lg font-medium transition-colors">Cancelar</button>
+                <button onClick={handleSave} className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium shadow-md flex items-center gap-2 transition-colors">
+                  <Save size={18} /> Salvar
+                </button>
+              </div>
             </div>
           </div>
         </div>

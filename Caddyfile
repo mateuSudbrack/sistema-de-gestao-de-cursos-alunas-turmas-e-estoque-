@@ -10,6 +10,6 @@ root * /home/ubuntu/labs/sistema-de-gestao-de-cursos-alunas-turmas-e-estoque-/di
     # Adicione outras rotas de API aqui se necessário
 }
 
-reverse_proxy @api_paths http://localhost:6667
+reverse_proxy @api_paths http://localhost:3003
 
 file_server

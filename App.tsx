@@ -137,6 +137,44 @@ const App: React.FC = () => {
      }
   };
 
+  const deleteStudent = async (id: string) => {
+    try {
+       const res = await fetch(`${API_BASE_URL}/students/${id}`, {
+          method: 'DELETE'
+       });
+       if (res.ok) {
+          setData(prev => ({
+             ...prev,
+             students: prev.students.filter(s => s.id !== id)
+          }));
+          addToast('Contato removido!', 'success');
+       } else {
+          addToast('Erro ao remover contato.', 'error');
+       }
+    } catch (e) {
+       console.error("Erro ao apagar aluno", e);
+       addToast('Erro de conexão.', 'error');
+    }
+  };
+
+  const handleDeleteCourse = (id: string) => {
+    setData(prev => ({
+      ...prev,
+      courses: prev.courses.filter(c => c.id !== id),
+      // Also remove classes associated with this course
+      classes: prev.classes.filter(cl => cl.courseId !== id)
+    }));
+    addToast('Curso removido!', 'success');
+  };
+
+  const handleDeleteProduct = (id: string) => {
+    setData(prev => ({
+      ...prev,
+      products: prev.products.filter(p => p.id !== id)
+    }));
+    addToast('Item removido do estoque!', 'success');
+  };
+
   // --- RESTO DO CÓDIGO (HANDLERS) ---
   
   // Theme
@@ -582,6 +620,7 @@ const App: React.FC = () => {
             classes={data.classes}
             onAddStudent={handleAddStudent}
             onUpdateStudent={handleUpdateStudent}
+            onDeleteStudent={deleteStudent}
             onEnrollStudent={handleEnrollStudent}
             onShowToast={addToast}
           />
@@ -594,6 +633,7 @@ const App: React.FC = () => {
             classes={data.classes}
             onAddCourse={handleAddCourse} 
             onUpdateCourse={handleUpdateCourse}
+            onDeleteCourse={handleDeleteCourse}
             onAddClass={handleAddClass}
             onShowToast={addToast}
             onEnrollStudent={handleEnrollStudent}
@@ -607,6 +647,7 @@ const App: React.FC = () => {
             products={data.products} 
             students={data.students}
             onUpdateStock={handleUpdateStock}
+            onDeleteProduct={handleDeleteProduct}
             onRecordSale={handleRecordSale}
             onShowToast={addToast}
           />
