@@ -7,13 +7,14 @@ import { v4 } from 'uuid';
 interface PaymentsProps {
   links: PaymentLink[];
   courses: Course[];
+  students: Student[];
   onAddLink: (link: PaymentLink) => void;
   onDeleteLink: (id: string) => void;
   onSimulatePayment: (linkId: string, customerName: string, customerPhone: string) => void;
   onShowToast: (msg: string, type: ToastType) => void;
 }
 
-const Payments: React.FC<PaymentsProps> = ({ links, courses, onAddLink, onDeleteLink, onSimulatePayment, onShowToast }) => {
+const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink, onDeleteLink, onSimulatePayment, onShowToast }) => {
   const [showCreator, setShowCreator] = useState(false);
   const [newLink, setNewLink] = useState<Partial<PaymentLink>>({ methods: ['pix', 'credit'], active: true });
   
@@ -26,6 +27,28 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, onAddLink, onDelete
   const [isProcessing, setIsProcessing] = useState(false);
   const [pixData, setPixData] = useState<{ qrCode: string, key: string } | null>(null);
 
+  const openCheckout = (link: PaymentLink) => {
+      setActiveCheckoutLink(link);
+      setCheckoutStep('details');
+      setPixData(null);
+      
+      // Se o link for para um aluno específico, preenche os dados
+      if (link.studentId) {
+          const student = students.find(s => s.id === link.studentId);
+          if (student) {
+              setCustomerData({
+                  name: student.name,
+                  phone: student.phone,
+                  email: student.email || '',
+                  cpf: '' // CPF geralmente não temos salvo no student padrão
+              });
+          }
+      } else {
+          setCustomerData({ name: '', phone: '', email: '', cpf: '' });
+      }
+      setCardData({ number: '', expiry: '', cvc: '', holder: '' });
+  };
+
   const handleCreate = () => {
     if(!newLink.title || !newLink.amount) return onShowToast('Preencha título e valor.', 'error');
     
@@ -35,6 +58,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, onAddLink, onDelete
         description: newLink.description || '',
         amount: newLink.amount,
         courseId: newLink.courseId,
+        studentId: newLink.studentId,
         methods: newLink.methods || ['pix'],
         active: true,
         clicks: 0
@@ -145,7 +169,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, onAddLink, onDelete
                            <Copy size={16}/> Copiar
                        </button>
                        <button 
-                         onClick={() => setActiveCheckoutLink(link)}
+                         onClick={() => openCheckout(link)}
                          className="flex-1 py-2 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 flex items-center justify-center gap-2 text-sm font-medium"
                        >
                            <ExternalLink size={16}/> Abrir
@@ -176,15 +200,26 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, onAddLink, onDelete
                       rows={3}
                       value={newLink.description} onChange={e => setNewLink({...newLink, description: e.target.value})}
                    />
-                   <select 
-                      className="w-full p-3 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text"
-                      value={newLink.courseId || ''}
-                      onChange={e => setNewLink({...newLink, courseId: e.target.value || undefined})}
-                   >
-                       <option value="">Vincular a um curso (Opcional)</option>
-                       {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                   </select>
-                   <p className="text-xs text-gray-400">Ao pagar, o aluno será matriculado automaticamente neste curso.</p>
+                   <div className="space-y-2">
+                       <select 
+                          className="w-full p-3 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text"
+                          value={newLink.courseId || ''}
+                          onChange={e => setNewLink({...newLink, courseId: e.target.value || undefined})}
+                       >
+                           <option value="">Vincular a um curso (Opcional)</option>
+                           {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                       </select>
+                       
+                       <select 
+                          className="w-full p-3 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text"
+                          value={newLink.studentId || ''}
+                          onChange={e => setNewLink({...newLink, studentId: e.target.value || undefined})}
+                       >
+                           <option value="">Vincular a uma Aluna específica (Opcional)</option>
+                           {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                       </select>
+                   </div>
+                   <p className="text-xs text-gray-400">Ao pagar, o aluno será matriculado automaticamente no curso selecionado.</p>
                    
                    <div className="flex justify-end gap-2 pt-4">
                        <button onClick={() => setShowCreator(false)} className="px-4 py-2 text-gray-500 dark:text-gray-400">Cancelar</button>
