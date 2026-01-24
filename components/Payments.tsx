@@ -267,7 +267,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, onAddLink, onDelete
                                            <>
                                                <div className="w-52 h-52 mx-auto flex items-center justify-center rounded-lg border-2 border-gray-100 p-2">
                                                    <img 
-                                                    src={`data:image/png;base64,${pixData.qrCode}`} 
+                                                    src={pixData.qrCode.startsWith('http') ? pixData.qrCode : (pixData.qrCode.startsWith('data:') ? pixData.qrCode : `data:image/png;base64,${pixData.qrCode}`)} 
                                                     alt="QR Code Pix"
                                                     className="w-full h-full object-contain"
                                                    />
