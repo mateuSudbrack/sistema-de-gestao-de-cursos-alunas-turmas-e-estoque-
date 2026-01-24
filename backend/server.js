@@ -397,7 +397,7 @@ app.post('/payments/create', async (req, res) => {
     } catch (error) {
         const errorDetail = error.response?.data || error.message;
         console.error('❌ Erro Crítico Safe2Pay:', errorDetail);
-        res.status(500).json({ 
+        res.status(500).json({
             error: 'Erro ao processar pagamento com Safe2Pay',
             details: typeof errorDetail === 'object' ? JSON.stringify(errorDetail) : errorDetail
         });
@@ -507,26 +507,6 @@ app.post('/payments/webhook', async (req, res) => {
             console.log(`✅ Pagamento ${transactionId} processado com sucesso para ${student.name}`);
         } else {
             console.log(`ℹ️ Webhook recebido com status irrelevante: ${statusCode}`);
-        }
-
-        res.status(200).send('OK');
-    } catch (error) {
-        console.error('❌ Erro no webhook Safe2Pay:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-            // 5. Atualizar aluno
-            await pool.query(
-                'UPDATE students SET type = \'student\', status = \'Ativo\', history = $1, "lastPurchase" = NOW(), "updatedAt" = NOW() WHERE id = $2',
-                [JSON.stringify(history), student.id]
-            );
-
-            // 6. Disparar automações
-            await triggerAutomation('payment_confirmed', student);
-            if (payment.courseId) await triggerAutomation('enrollment_created', student);
-
-            console.log(`✅ Pagamento processado para ${student.name}`);
         }
 
         res.status(200).send('OK');
