@@ -7,7 +7,8 @@ root * /home/ubuntu/labs/sistema-de-gestao-de-cursos-alunas-turmas-e-estoque-/di
     path /sync/*
     path /students
     path /students/*
-    # Adicione outras rotas de API aqui se necessário
+    path /payments
+    path /payments/*
 }
 
 reverse_proxy @api_paths http://localhost:3003

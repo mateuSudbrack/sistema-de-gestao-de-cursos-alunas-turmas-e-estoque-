@@ -20,8 +20,11 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, onAddLink, onDelete
   // Checkout "Real" State
   const [activeCheckoutLink, setActiveCheckoutLink] = useState<PaymentLink | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<'details' | 'payment' | 'success'>('details');
-  const [customerData, setCustomerData] = useState({ name: '', phone: '' });
+  const [customerData, setCustomerData] = useState({ name: '', phone: '', email: '', cpf: '' });
+  const [cardData, setCardData] = useState({ number: '', expiry: '', cvc: '', holder: '' });
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit'>('pix');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [pixData, setPixData] = useState<{ qrCode: string, key: string } | null>(null);
 
   const handleCreate = () => {
     if(!newLink.title || !newLink.amount) return onShowToast('Preencha título e valor.', 'error');
@@ -42,17 +45,54 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, onAddLink, onDelete
     onShowToast('Link de pagamento criado!', 'success');
   };
 
-  const handleProcessPayment = () => {
+  const handleProcessPayment = async () => {
      if(!activeCheckoutLink) return;
-     if(!customerData.name || !customerData.phone) return alert("Preencha os dados");
+     if(!customerData.name || !customerData.phone || !customerData.email || !customerData.cpf) {
+         return onShowToast("Preencha todos os dados do comprador", 'error');
+     }
      
-     setCheckoutStep('success');
-     setTimeout(() => {
-         onSimulatePayment(activeCheckoutLink.id, customerData.name, customerData.phone);
-         setActiveCheckoutLink(null);
-         setCheckoutStep('details');
-         setCustomerData({ name: '', phone: '' });
-     }, 3000);
+     setIsProcessing(true);
+     
+     try {
+         const response = await fetch(`${(import.meta as any).env?.VITE_API_URL || 'https://certificados.digiyou.com.br/api/service'}/payments/create`, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({
+                 link: activeCheckoutLink,
+                 customer: {
+                     ...customerData,
+                     cardNumber: cardData.number,
+                     cardExpiry: cardData.expiry,
+                     cardCVC: cardData.cvc,
+                     cardHolder: cardData.holder
+                 },
+                 method: paymentMethod
+             })
+         });
+
+         const result = await response.json();
+
+         if (result.success) {
+             if (paymentMethod === 'pix') {
+                 setPixData({ qrCode: result.pix, key: result.pixKey });
+             } else {
+                 setCheckoutStep('success');
+                 setTimeout(() => {
+                    setActiveCheckoutLink(null);
+                    setCheckoutStep('details');
+                    setCustomerData({ name: '', phone: '', email: '', cpf: '' });
+                    setCardData({ number: '', expiry: '', cvc: '', holder: '' });
+                 }, 4000);
+             }
+         } else {
+             onShowToast(result.error || "Erro ao processar pagamento", 'error');
+         }
+     } catch (error) {
+         console.error(error);
+         onShowToast("Erro de conexão com o servidor", 'error');
+     } finally {
+         setIsProcessing(false);
+     }
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -180,9 +220,20 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, onAddLink, onDelete
                                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none" placeholder="Nome Completo"
                                   value={customerData.name} onChange={e => setCustomerData({...customerData, name: e.target.value})}
                                />
+                               <div className="flex gap-2">
+                                   <input 
+                                      className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none" placeholder="WhatsApp"
+                                      value={customerData.phone} onChange={e => setCustomerData({...customerData, phone: e.target.value})}
+                                   />
+                                   <input 
+                                      className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none" placeholder="CPF"
+                                      value={customerData.cpf} onChange={e => setCustomerData({...customerData, cpf: e.target.value})}
+                                   />
+                               </div>
                                <input 
-                                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none" placeholder="WhatsApp / Celular"
-                                  value={customerData.phone} onChange={e => setCustomerData({...customerData, phone: e.target.value})}
+                                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none" placeholder="E-mail"
+                                  type="email"
+                                  value={customerData.email} onChange={e => setCustomerData({...customerData, email: e.target.value})}
                                />
                                <button 
                                   onClick={() => setCheckoutStep('payment')}
@@ -197,13 +248,13 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, onAddLink, onDelete
                            <div className="space-y-4">
                                <div className="flex gap-2 mb-4 bg-gray-100 p-1 rounded-lg">
                                    <button 
-                                      onClick={() => setPaymentMethod('pix')}
+                                      onClick={() => { setPaymentMethod('pix'); setPixData(null); }}
                                       className={`flex-1 py-2 rounded-md font-bold text-sm transition-all ${paymentMethod === 'pix' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                                    >
                                        Pix
                                    </button>
                                    <button 
-                                      onClick={() => setPaymentMethod('credit')}
+                                      onClick={() => { setPaymentMethod('credit'); setPixData(null); }}
                                       className={`flex-1 py-2 rounded-md font-bold text-sm transition-all ${paymentMethod === 'credit' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                                    >
                                        Cartão de Crédito
@@ -212,43 +263,82 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, onAddLink, onDelete
 
                                {paymentMethod === 'pix' ? (
                                    <div className="text-center space-y-4 animate-in fade-in">
-                                       <div className="w-52 h-52 mx-auto flex items-center justify-center rounded-lg border-2 border-gray-100 p-2">
-                                           {/* Real QR Code Generator API for visual realism */}
-                                           <img 
-                                            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=pagamento-${activeCheckoutLink.id}-${Date.now()}`} 
-                                            alt="QR Code Pix"
-                                            className="w-full h-full object-contain"
-                                           />
-                                       </div>
-                                       <div className="space-y-1">
-                                            <p className="text-sm font-bold text-gray-800">Escaneie o QR Code</p>
-                                            <p className="text-xs text-gray-500">Abra o app do seu banco e escolha Pagar com Pix.</p>
-                                       </div>
-                                       <div className="bg-gray-100 p-3 rounded-lg flex justify-between items-center text-xs text-gray-600 cursor-pointer hover:bg-gray-200">
-                                           <span className="truncate pr-4">00020126580014br.gov.bcb.pix0136123e4567-e89b-12d3-a456-426614174000...</span>
-                                           <Copy size={14}/>
-                                       </div>
+                                       {pixData ? (
+                                           <>
+                                               <div className="w-52 h-52 mx-auto flex items-center justify-center rounded-lg border-2 border-gray-100 p-2">
+                                                   <img 
+                                                    src={`data:image/png;base64,${pixData.qrCode}`} 
+                                                    alt="QR Code Pix"
+                                                    className="w-full h-full object-contain"
+                                                   />
+                                               </div>
+                                               <div className="space-y-1">
+                                                    <p className="text-sm font-bold text-gray-800">Escaneie o QR Code</p>
+                                                    <p className="text-xs text-gray-500">Abra o app do seu banco e escolha Pagar com Pix.</p>
+                                               </div>
+                                               <div 
+                                                 onClick={() => {
+                                                     navigator.clipboard.writeText(pixData.key);
+                                                     onShowToast('Copia e Cola copiado!', 'success');
+                                                 }}
+                                                 className="bg-gray-100 p-3 rounded-lg flex justify-between items-center text-xs text-gray-600 cursor-pointer hover:bg-gray-200"
+                                               >
+                                                   <span className="truncate pr-4">{pixData.key}</span>
+                                                   <Copy size={14}/>
+                                               </div>
+                                               <p className="text-xs text-blue-600 font-medium animate-pulse">Aguardando confirmação do pagamento...</p>
+                                           </>
+                                       ) : (
+                                           <div className="py-8 space-y-4">
+                                               <QrCode size={48} className="mx-auto text-gray-300"/>
+                                               <p className="text-sm text-gray-500">Clique no botão abaixo para gerar seu QR Code Pix.</p>
+                                           </div>
+                                       )}
                                    </div>
                                ) : (
                                    <div className="space-y-3 animate-in fade-in">
                                        <div className="relative">
                                            <CreditCard className="absolute left-3 top-3.5 text-gray-400" size={18}/>
-                                           <input className="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:border-green-500 outline-none" placeholder="Número do Cartão"/>
+                                           <input 
+                                              className="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:border-green-500 outline-none" placeholder="Número do Cartão"
+                                              value={cardData.number} onChange={e => setCardData({...cardData, number: e.target.value})}
+                                           />
                                        </div>
                                        <div className="flex gap-3">
-                                           <input className="flex-1 p-3 border border-gray-300 rounded-lg focus:border-green-500 outline-none" placeholder="MM/AA"/>
-                                           <input className="w-24 p-3 border border-gray-300 rounded-lg focus:border-green-500 outline-none" placeholder="CVC"/>
+                                           <input 
+                                              className="flex-1 p-3 border border-gray-300 rounded-lg focus:border-green-500 outline-none" placeholder="MM/AAAA"
+                                              value={cardData.expiry} onChange={e => setCardData({...cardData, expiry: e.target.value})}
+                                           />
+                                           <input 
+                                              className="w-24 p-3 border border-gray-300 rounded-lg focus:border-green-500 outline-none" placeholder="CVC"
+                                              value={cardData.cvc} onChange={e => setCardData({...cardData, cvc: e.target.value})}
+                                           />
                                        </div>
-                                       <input className="w-full p-3 border border-gray-300 rounded-lg focus:border-green-500 outline-none" placeholder="Nome no Cartão"/>
+                                       <input 
+                                          className="w-full p-3 border border-gray-300 rounded-lg focus:border-green-500 outline-none" placeholder="Nome no Cartão"
+                                          value={cardData.holder} onChange={e => setCardData({...cardData, holder: e.target.value})}
+                                       />
                                    </div>
                                )}
 
-                               <button 
-                                  onClick={handleProcessPayment}
-                                  className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-lg font-bold mt-6 shadow-lg shadow-green-200 transition-all"
-                               >
-                                   {paymentMethod === 'pix' ? 'Já fiz o pagamento' : `Pagar ${formatCurrency(activeCheckoutLink.amount)}`}
-                               </button>
+                               {(!pixData || paymentMethod === 'credit') && (
+                                   <button 
+                                      onClick={handleProcessPayment}
+                                      disabled={isProcessing}
+                                      className={`w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-lg font-bold mt-6 shadow-lg shadow-green-200 transition-all flex items-center justify-center gap-2 ${isProcessing ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                   >
+                                       {isProcessing ? 'Processando...' : (paymentMethod === 'pix' ? 'Gerar QR Code Pix' : `Pagar ${formatCurrency(activeCheckoutLink.amount)}`)}
+                                   </button>
+                               )}
+                               
+                               {pixData && (
+                                    <button 
+                                        onClick={() => setActiveCheckoutLink(null)}
+                                        className="w-full text-gray-500 py-3 text-sm font-medium hover:text-gray-700"
+                                    >
+                                        Fechar e pagar depois
+                                    </button>
+                               )}
                            </div>
                        )}
 
