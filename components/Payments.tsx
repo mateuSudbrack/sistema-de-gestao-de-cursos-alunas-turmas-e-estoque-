@@ -52,6 +52,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, onAddLink, onDelete
      }
      
      setIsProcessing(true);
+     setPixData(null); // Limpar dados de PIX anterior
      
      try {
          const response = await fetch(`${(import.meta as any).env?.VITE_API_URL || 'https://certificados.digiyou.com.br/api/service'}/payments/create`, {

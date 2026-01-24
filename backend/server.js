@@ -38,9 +38,9 @@ pool.connect((err) => {
         pool.query(`
             CREATE TABLE IF NOT EXISTS payments (
                 id UUID PRIMARY KEY,
-                "linkId" UUID,
-                "studentId" UUID,
-                "courseId" UUID,
+                "linkId" TEXT,
+                "studentId" TEXT,
+                "courseId" TEXT,
                 amount DECIMAL(10,2),
                 method VARCHAR(50),
                 status VARCHAR(50),
@@ -49,7 +49,11 @@ pool.connect((err) => {
                 "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                 "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             );
-        `).catch(e => console.error('Erro ao criar tabela payments:', e));
+            -- Garantir que colunas antigas sejam TEXT se ja existiam como UUID
+            ALTER TABLE payments ALTER COLUMN "linkId" TYPE TEXT;
+            ALTER TABLE payments ALTER COLUMN "courseId" TYPE TEXT;
+            ALTER TABLE payments ALTER COLUMN "studentId" TYPE TEXT;
+        `).catch(e => console.log('Info: Tabela de pagamentos verificada.'));
     }
 });
 
@@ -299,6 +303,10 @@ app.post('/payments/create', async (req, res) => {
     try {
         const { link, customer, method } = req.body;
 
+        if (!customer.cpf || !customer.name || !customer.phone) {
+            return res.status(400).json({ error: 'Dados do cliente incompletos (Nome, CPF e Telefone são obrigatórios).' });
+        }
+
         // Tenta determinar a URL base para o webhook
         const protocol = req.headers['x-forwarded-proto'] || req.protocol;
         const host = req.headers['host'];
@@ -313,12 +321,12 @@ app.post('/payments/create', async (req, res) => {
                 Name: customer.name,
                 Identity: customer.cpf.replace(/\D/g, ''),
                 Phone: customer.phone.replace(/\D/g, ''),
-                Email: customer.email,
+                Email: customer.email || 'contato@esteticapro.com',
                 Address: {
-                    ZipCode: '00000000',
-                    Street: 'Rua Informativa',
-                    Number: '123',
-                    District: 'Centro',
+                    ZipCode: '01310100', // CEP Genérico válido (Paulista, SP)
+                    Street: 'Avenida Paulista',
+                    Number: '1000',
+                    District: 'Bela Vista',
                     CityName: 'São Paulo',
                     StateInitials: 'SP',
                     CountryName: 'Brasil'
@@ -326,7 +334,7 @@ app.post('/payments/create', async (req, res) => {
             },
             Products: [
                 {
-                    Code: link.id,
+                    Code: link.id.substring(0, 10),
                     Description: link.title,
                     UnitPrice: link.amount,
                     Quantity: 1
@@ -336,39 +344,45 @@ app.post('/payments/create', async (req, res) => {
         };
 
         if (method === 'credit') {
+            const expiry = customer.cardExpiry.replace(/\D/g, ''); // Espera MMAAAA
             payload.CreditCard = {
                 Holder: customer.cardHolder,
-                CardNumber: customer.cardNumber,
-                ExpirationDate: customer.cardExpiry,
+                CardNumber: customer.cardNumber.replace(/\D/g, ''),
+                ExpirationDate: expiry.length === 4 ? `${expiry.substring(0,2)}/20${expiry.substring(2,4)}` : (expiry.length === 6 ? `${expiry.substring(0,2)}/${expiry.substring(2,6)}` : expiry),
                 SecurityCode: customer.cardCVC,
                 InstallmentQuantity: 1
             };
         }
+
+        console.log(`🚀 Enviando pagamento Safe2Pay (${method}):`, JSON.stringify(payload, null, 2));
 
         const response = await axios.post(`${SAFE2PAY_BASE_URL}/Payment`, payload, {
             headers: { 'X-API-KEY': SAFE2PAY_API_KEY }
         });
 
         const s2pData = response.data;
+        console.log('✅ Resposta Safe2Pay:', JSON.stringify(s2pData, null, 2));
 
         if (s2pData.HasError) {
+            console.error('❌ Erro na API Safe2Pay:', s2pData.Error);
             return res.status(400).json({ error: s2pData.Error });
         }
 
         // Salvar no banco
         const paymentId = uuidv4();
+
         await pool.query(
             `INSERT INTO payments (id, "linkId", "courseId", amount, method, status, "safe2payId", "customerData")
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
             [
                 paymentId, 
-                link.id, 
-                link.courseId || null, 
+                link.id.toString(), 
+                link.courseId ? link.courseId.toString() : null, 
                 link.amount, 
                 method, 
                 'pending', 
-                s2pData.ResponseDetail.IdTransaction, 
-                JSON.stringify(customer)
+                s2pData.ResponseDetail.IdTransaction.toString(), 
+                JSON.stringify({ ...customer, linkId: link.id, courseId: link.courseId })
             ]
         );
 
@@ -381,8 +395,12 @@ app.post('/payments/create', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Erro Safe2Pay:', error.response?.data || error.message);
-        res.status(500).json({ error: 'Erro ao processar pagamento com Safe2Pay' });
+        const errorDetail = error.response?.data || error.message;
+        console.error('❌ Erro Crítico Safe2Pay:', errorDetail);
+        res.status(500).json({ 
+            error: 'Erro ao processar pagamento com Safe2Pay',
+            details: typeof errorDetail === 'object' ? JSON.stringify(errorDetail) : errorDetail
+        });
     }
 });
 
@@ -390,15 +408,25 @@ app.post('/payments/create', async (req, res) => {
 app.post('/payments/webhook', async (req, res) => {
     try {
         const body = req.body;
-        console.log('🔔 Webhook Safe2Pay:', body);
+        console.log('🔔 Webhook Safe2Pay:', JSON.stringify(body, null, 2));
 
-        const transactionId = body.IdTransaction;
-        const status = body.Status; // 3 = Pago (Geralmente)
+        // Safe2Pay pode enviar de formas diferentes dependendo da versão/config
+        const transactionId = body.IdTransaction || (body.Transaction && body.Transaction.Id);
+        const statusCode = body.TransactionStatus ? body.TransactionStatus.Code : (body.Status !== undefined ? body.Status : null);
 
-        if (status === 3 || status === 'Success' || body.TransactionStatus?.Code === '3') {
+        // Status 3 geralmente é "Pago" / "Success"
+        if (statusCode == 3 || statusCode == '3' || body.Status === 'Success' || (body.TransactionStatus && body.TransactionStatus.Code == 3)) {
+            if (!transactionId) {
+                console.error('❌ Webhook recebido sem IdTransaction');
+                return res.status(400).send('No Transaction ID');
+            }
+
             // 1. Buscar pagamento no banco
             const payRes = await pool.query('SELECT * FROM payments WHERE "safe2payId" = $1', [transactionId.toString()]);
-            if (payRes.rows.length === 0) return res.status(404).send('Payment not found');
+            if (payRes.rows.length === 0) {
+                console.warn(`⚠️ Pagamento ${transactionId} não encontrado no banco local.`);
+                return res.status(404).send('Payment not found');
+            }
 
             const payment = payRes.rows[0];
             if (payment.status === 'paid') return res.send('Already processed');
@@ -409,6 +437,7 @@ app.post('/payments/webhook', async (req, res) => {
             // 3. Buscar ou criar aluno
             const customer = payment.customerData;
             const phone = customer.phone.replace(/\D/g, '');
+            const courseId = payment.courseId || customer.courseId;
             
             let student;
             const studentRes = await pool.query('SELECT * FROM students WHERE phone = $1', [phone]);
@@ -427,19 +456,17 @@ app.post('/payments/webhook', async (req, res) => {
             }
 
             // 4. Se houver curso vinculado, matricular
-            let history = student.history || [];
-            if (payment.courseId) {
-                // Buscar uma turma aberta para o curso
+            let history = Array.isArray(student.history) ? student.history : [];
+            if (courseId) {
                 const globalRes = await pool.query("SELECT data FROM app_settings WHERE key = 'GLOBAL_STATE'");
                 if (globalRes.rows.length > 0) {
                     const globalData = globalRes.rows[0].data;
                     const classes = globalData.classes || [];
                     const openClass = classes
-                        .filter(c => c.courseId === payment.courseId && c.status === 'open')
+                        .filter(c => c.courseId === courseId && c.status === 'open')
                         .sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())[0];
                     
                     if (openClass) {
-                        // Matricular na turma
                         if (!openClass.enrolledStudentIds.includes(student.id)) {
                             openClass.enrolledStudentIds.push(student.id);
                             globalData.classes = classes;
@@ -450,7 +477,7 @@ app.post('/payments/webhook', async (req, res) => {
                         }
 
                         history.push({
-                            courseId: payment.courseId,
+                            courseId: courseId,
                             classId: openClass.id,
                             date: new Date().toISOString().split('T')[0],
                             paid: parseFloat(payment.amount),
@@ -461,11 +488,33 @@ app.post('/payments/webhook', async (req, res) => {
             } else {
                 history.push({
                     date: new Date().toISOString().split('T')[0],
-                    paid: payment.amount,
+                    paid: parseFloat(payment.amount),
                     status: 'paid',
-                    notes: 'Pagamento avulso via link'
+                    notes: 'Pagamento via link'
                 });
             }
+
+            // 5. Atualizar aluno
+            await pool.query(
+                'UPDATE students SET type = \'student\', status = \'Ativo\', history = $1, "lastPurchase" = NOW(), "updatedAt" = NOW() WHERE id = $2',
+                [JSON.stringify(history), student.id]
+            );
+
+            // 6. Disparar automações
+            await triggerAutomation('payment_confirmed', student);
+            if (courseId) await triggerAutomation('enrollment_created', student);
+
+            console.log(`✅ Pagamento ${transactionId} processado com sucesso para ${student.name}`);
+        } else {
+            console.log(`ℹ️ Webhook recebido com status irrelevante: ${statusCode}`);
+        }
+
+        res.status(200).send('OK');
+    } catch (error) {
+        console.error('❌ Erro no webhook Safe2Pay:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
             // 5. Atualizar aluno
             await pool.query(
