@@ -22,9 +22,15 @@ const App: React.FC = () => {
   console.log('Rendering App component');
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [loading, setLoading] = useState(true);
+  const [paymentStudentId, setPaymentStudentId] = useState<string | null>(null);
   
   // Estado Inicial
   const [data, setData] = useState<AppState>(INITIAL_DATA);
+
+  const handleOpenPaymentForStudent = (studentId: string) => {
+      setPaymentStudentId(studentId);
+      setCurrentView('payments');
+  };
 
   console.log('Current state:', { loading, currentView, theme: data.theme });
 
@@ -48,6 +54,7 @@ const App: React.FC = () => {
              name: s.name,
              phone: s.phone,
              email: s.email,
+             cpf: s.cpf,
              photo: s.photo,
              type: (s.type as StudentType) || 'lead',
              status: (s.status as StudentStatus) || StudentStatus.INTERESTED,
@@ -623,6 +630,7 @@ const App: React.FC = () => {
             onDeleteStudent={deleteStudent}
             onEnrollStudent={handleEnrollStudent}
             onShowToast={addToast}
+            onGeneratePayment={handleOpenPaymentForStudent}
           />
         )}
         
@@ -673,6 +681,8 @@ const App: React.FC = () => {
                 onDeleteLink={handleDeleteLink}
                 onSimulatePayment={handleSimulatePayment}
                 onShowToast={addToast}
+                preSelectedStudentId={paymentStudentId}
+                onClearPreSelection={() => setPaymentStudentId(null)}
             />
         )}
 

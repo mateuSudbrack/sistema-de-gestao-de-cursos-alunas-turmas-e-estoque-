@@ -12,25 +12,42 @@ interface PaymentsProps {
   onDeleteLink: (id: string) => void;
   onSimulatePayment: (linkId: string, customerName: string, customerPhone: string) => void;
   onShowToast: (msg: string, type: ToastType) => void;
+  preSelectedStudentId?: string | null;
+  onClearPreSelection?: () => void;
 }
 
-const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink, onDeleteLink, onSimulatePayment, onShowToast }) => {
+const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink, onDeleteLink, onSimulatePayment, onShowToast, preSelectedStudentId, onClearPreSelection }) => {
   const [showCreator, setShowCreator] = useState(false);
   const [newLink, setNewLink] = useState<Partial<PaymentLink>>({ methods: ['pix', 'credit'], active: true });
+  const [studentSearch, setStudentSearch] = useState('');
   
   // Checkout "Real" State
   const [activeCheckoutLink, setActiveCheckoutLink] = useState<PaymentLink | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<'details' | 'payment' | 'success'>('details');
   const [customerData, setCustomerData] = useState({ name: '', phone: '', email: '', cpf: '' });
   const [cardData, setCardData] = useState({ number: '', expiry: '', cvc: '', holder: '' });
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit'>('pix');
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit' | 'boleto'>('pix');
   const [isProcessing, setIsProcessing] = useState(false);
   const [pixData, setPixData] = useState<{ qrCode: string, key: string } | null>(null);
+  const [boletoData, setBoletoData] = useState<{ url: string, barcode: string } | null>(null);
+
+  React.useEffect(() => {
+    if (preSelectedStudentId) {
+        const student = students.find(s => s.id === preSelectedStudentId);
+        if (student) {
+            setNewLink(prev => ({ ...prev, studentId: student.id }));
+            setStudentSearch(student.name);
+            setShowCreator(true);
+        }
+        onClearPreSelection?.();
+    }
+  }, [preSelectedStudentId, students, onClearPreSelection]);
 
   const openCheckout = (link: PaymentLink) => {
       setActiveCheckoutLink(link);
       setCheckoutStep('details');
       setPixData(null);
+      setBoletoData(null);
       
       // Se o link for para um aluno específico, preenche os dados
       if (link.studentId) {
@@ -40,7 +57,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                   name: student.name,
                   phone: student.phone,
                   email: student.email || '',
-                  cpf: '' // CPF geralmente não temos salvo no student padrão
+                  cpf: student.cpf || ''
               });
           }
       } else {
@@ -66,7 +83,16 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
     onAddLink(link);
     setShowCreator(false);
     setNewLink({ methods: ['pix', 'credit'], active: true });
+    setStudentSearch('');
     onShowToast('Link de pagamento criado!', 'success');
+    return link;
+  };
+
+  const handleCreateAndOpen = () => {
+    const link = handleCreate();
+    if (link) {
+        openCheckout(link);
+    }
   };
 
   const handleProcessPayment = async () => {
@@ -100,6 +126,9 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
          if (result.success) {
              if (paymentMethod === 'pix') {
                  setPixData({ qrCode: result.pix, key: result.pixKey });
+             } else if (paymentMethod === 'boleto') {
+                 setBoletoData({ url: result.boletoUrl, barcode: result.boletoBarcode });
+                 setCheckoutStep('success');
              } else {
                  setCheckoutStep('success');
                  setTimeout(() => {
@@ -204,26 +233,74 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                        <select 
                           className="w-full p-3 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text"
                           value={newLink.courseId || ''}
-                          onChange={e => setNewLink({...newLink, courseId: e.target.value || undefined})}
+                          onChange={e => {
+                              const courseId = e.target.value;
+                              const course = courses.find(c => c.id === courseId);
+                              setNewLink({
+                                  ...newLink, 
+                                  courseId: courseId || undefined,
+                                  title: course ? course.name : newLink.title,
+                                  amount: course ? course.price : newLink.amount
+                              });
+                          }}
                        >
                            <option value="">Vincular a um curso (Opcional)</option>
                            {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                        </select>
                        
-                       <select 
-                          className="w-full p-3 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text"
-                          value={newLink.studentId || ''}
-                          onChange={e => setNewLink({...newLink, studentId: e.target.value || undefined})}
-                       >
-                           <option value="">Vincular a uma Aluna específica (Opcional)</option>
-                           {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                       </select>
+                       <div className="relative">
+                           <input 
+                                type="text"
+                                placeholder="Pesquisar Aluna..."
+                                className="w-full p-3 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text"
+                                value={studentSearch}
+                                onChange={e => {
+                                    setStudentSearch(e.target.value);
+                                    if (!e.target.value) setNewLink({...newLink, studentId: undefined});
+                                }}
+                           />
+                           {studentSearch && !newLink.studentId && (
+                               <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                                   {students
+                                     .filter(s => s.name.toLowerCase().includes(studentSearch.toLowerCase()) || s.phone.includes(studentSearch))
+                                     .map(s => (
+                                       <button 
+                                         key={s.id}
+                                         className="w-full text-left p-3 hover:bg-gray-100 dark:hover:bg-white/5 text-sm dark:text-dark-text border-b last:border-0 border-gray-100 dark:border-dark-border"
+                                         onClick={() => {
+                                             setNewLink({...newLink, studentId: s.id});
+                                             setStudentSearch(s.name);
+                                         }}
+                                       >
+                                           <div className="font-bold">{s.name}</div>
+                                           <div className="text-xs text-gray-500">{s.phone}</div>
+                                       </button>
+                                   ))}
+                               </div>
+                           )}
+                           {newLink.studentId && (
+                               <button 
+                                 onClick={() => {
+                                     setNewLink({...newLink, studentId: undefined});
+                                     setStudentSearch('');
+                                 }}
+                                 className="absolute right-3 top-3.5 text-xs text-red-500 hover:text-red-700"
+                               >
+                                   Limpar
+                               </button>
+                           )}
+                       </div>
                    </div>
                    <p className="text-xs text-gray-400">Ao pagar, o aluno será matriculado automaticamente no curso selecionado.</p>
                    
                    <div className="flex justify-end gap-2 pt-4">
-                       <button onClick={() => setShowCreator(false)} className="px-4 py-2 text-gray-500 dark:text-gray-400">Cancelar</button>
-                       <button onClick={handleCreate} className="px-6 py-2 bg-primary-600 text-white rounded-lg font-bold">Criar Link</button>
+                       <button onClick={() => {
+                           setShowCreator(false);
+                           setNewLink({ methods: ['pix', 'credit'], active: true });
+                           setStudentSearch('');
+                       }} className="px-4 py-2 text-gray-500 dark:text-gray-400">Cancelar</button>
+                       <button onClick={() => handleCreate()} className="px-4 py-2 border border-primary-500 text-primary-600 rounded-lg font-bold hover:bg-primary-50">Criar Link</button>
+                       <button onClick={handleCreateAndOpen} className="px-6 py-2 bg-primary-600 text-white rounded-lg font-bold shadow-md hover:bg-primary-700">Criar e Pagar Agora</button>
                    </div>
                </div>
            </div>
@@ -284,16 +361,22 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                            <div className="space-y-4">
                                <div className="flex gap-2 mb-4 bg-gray-100 p-1 rounded-lg">
                                    <button 
-                                      onClick={() => { setPaymentMethod('pix'); setPixData(null); }}
+                                      onClick={() => { setPaymentMethod('pix'); setPixData(null); setBoletoData(null); }}
                                       className={`flex-1 py-2 rounded-md font-bold text-sm transition-all ${paymentMethod === 'pix' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                                    >
                                        Pix
                                    </button>
                                    <button 
-                                      onClick={() => { setPaymentMethod('credit'); setPixData(null); }}
+                                      onClick={() => { setPaymentMethod('credit'); setPixData(null); setBoletoData(null); }}
                                       className={`flex-1 py-2 rounded-md font-bold text-sm transition-all ${paymentMethod === 'credit' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                                    >
-                                       Cartão de Crédito
+                                       Cartão
+                                   </button>
+                                   <button 
+                                      onClick={() => { setPaymentMethod('boleto'); setPixData(null); setBoletoData(null); }}
+                                      className={`flex-1 py-2 rounded-md font-bold text-sm transition-all ${paymentMethod === 'boleto' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                   >
+                                       Boleto
                                    </button>
                                </div>
 
@@ -355,15 +438,22 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                                           value={cardData.holder} onChange={e => setCardData({...cardData, holder: e.target.value})}
                                        />
                                    </div>
-                               )}
+                               ) : paymentMethod === 'boleto' ? (
+                                   <div className="text-center py-8 space-y-4 animate-in fade-in">
+                                       <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
+                                            <Copy size={32} />
+                                       </div>
+                                       <p className="text-sm text-gray-500">O boleto será gerado com vencimento para 3 dias.</p>
+                                   </div>
+                               ) : null}
 
-                               {(!pixData || paymentMethod === 'credit') && (
+                               {(!pixData || (paymentMethod !== 'pix' && paymentMethod !== 'boleto')) && (
                                    <button 
                                       onClick={handleProcessPayment}
                                       disabled={isProcessing}
                                       className={`w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-lg font-bold mt-6 shadow-lg shadow-green-200 transition-all flex items-center justify-center gap-2 ${isProcessing ? 'opacity-70 cursor-not-allowed' : ''}`}
                                    >
-                                       {isProcessing ? 'Processando...' : (paymentMethod === 'pix' ? 'Gerar QR Code Pix' : `Pagar ${formatCurrency(activeCheckoutLink.amount)}`)}
+                                       {isProcessing ? 'Processando...' : (paymentMethod === 'pix' ? 'Gerar QR Code Pix' : (paymentMethod === 'boleto' ? 'Gerar Boleto' : `Pagar ${formatCurrency(activeCheckoutLink.amount)}`))}
                                    </button>
                                )}
                                
@@ -384,8 +474,38 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                                    <CheckCircle size={40}/>
                                </div>
                                <h3 className="text-2xl font-bold text-gray-800">Sucesso!</h3>
-                               <p className="text-gray-500 mt-2">Pagamento aprovado.</p>
-                               <p className="text-sm text-gray-400 mt-6">Redirecionando...</p>
+                               {boletoData ? (
+                                   <div className="mt-4 space-y-4">
+                                       <p className="text-gray-500">Boleto gerado com sucesso.</p>
+                                       <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs font-mono break-all text-gray-600">
+                                           {boletoData.barcode}
+                                       </div>
+                                       <div className="flex flex-col gap-2">
+                                           <a 
+                                                href={boletoData.url} 
+                                                target="_blank" 
+                                                rel="noreferrer"
+                                                className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2"
+                                            >
+                                                <ExternalLink size={18}/> Visualizar Boleto
+                                            </a>
+                                            <button 
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(boletoData.barcode);
+                                                    onShowToast('Código de barras copiado!', 'success');
+                                                }}
+                                                className="w-full border border-gray-300 py-3 rounded-lg font-bold text-gray-600"
+                                            >
+                                                Copiar Código
+                                            </button>
+                                       </div>
+                                   </div>
+                               ) : (
+                                   <>
+                                       <p className="text-gray-500 mt-2">Pagamento aprovado.</p>
+                                       <p className="text-sm text-gray-400 mt-6">Redirecionando...</p>
+                                   </>
+                               )}
                            </div>
                        )}
                    </div>

@@ -59,6 +59,7 @@ export interface Student {
   name: string;
   phone: string;
   email?: string;
+  cpf?: string;
   photo?: string;
   type: StudentType; // Lead ou Student
   status: StudentStatus;

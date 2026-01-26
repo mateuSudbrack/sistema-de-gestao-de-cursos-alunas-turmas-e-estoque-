@@ -9,6 +9,12 @@ root * /home/ubuntu/labs/sistema-de-gestao-de-cursos-alunas-turmas-e-estoque-/di
     path /students/*
     path /payments
     path /payments/*
+    path /api/service/*
+}
+
+route /api/service/* {
+    uri strip_prefix /api/service
+    reverse_proxy http://localhost:3003
 }
 
 reverse_proxy @api_paths http://localhost:3003

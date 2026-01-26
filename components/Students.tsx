@@ -13,9 +13,10 @@ interface StudentsProps {
   onDeleteStudent: (id: string) => void;
   onEnrollStudent: (studentId: string, classId: string, paidAmount: number, isPaid: boolean) => void;
   onShowToast: (message: string, type: ToastType) => void;
+  onGeneratePayment: (studentId: string) => void;
 }
 
-const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddStudent, onUpdateStudent, onDeleteStudent, onEnrollStudent, onShowToast }) => {
+const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddStudent, onUpdateStudent, onDeleteStudent, onEnrollStudent, onShowToast, onGeneratePayment }) => {
   const [activeTab, setActiveTab] = useState<StudentType>('student'); // 'lead' | 'student'
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -270,7 +271,12 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
               >
                 <MessageCircle size={16} /> WhatsApp
               </a>
-              
+              <button 
+                onClick={() => onGeneratePayment(student.id)}
+                className="flex-1 bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded-lg flex items-center justify-center gap-1.5 font-medium transition-colors py-2 text-sm"
+              >
+                <DollarSign size={16} /> Pagamento
+              </button>
             </div>
 
             {/* AI Message Popover */}
@@ -350,6 +356,15 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
                         className="w-full border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text rounded-lg p-2.5 focus:ring-2 focus:ring-primary-200 outline-none"
                         value={editingStudent.phone}
                         onChange={e => setEditingStudent({...editingStudent, phone: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-dark-textMuted mb-1">CPF</label>
+                      <input 
+                        type="text" 
+                        className="w-full border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text rounded-lg p-2.5 focus:ring-2 focus:ring-primary-200 outline-none"
+                        value={editingStudent.cpf || ''}
+                        onChange={e => setEditingStudent({...editingStudent, cpf: e.target.value})}
                       />
                     </div>
                     <div>
@@ -532,6 +547,12 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
                 )}
               </div>
               <div className="flex gap-3">
+                <button 
+                    onClick={() => onGeneratePayment(editingStudent.id!)}
+                    className="px-4 py-2 bg-primary-100 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 rounded-lg font-medium hover:bg-primary-200 transition-colors flex items-center gap-2"
+                >
+                    <DollarSign size={18} /> Gerar Pagamento
+                </button>
                 <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 rounded-lg font-medium transition-colors">Cancelar</button>
                 <button onClick={handleSave} className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium shadow-md flex items-center gap-2 transition-colors">
                   <Save size={18} /> Salvar
