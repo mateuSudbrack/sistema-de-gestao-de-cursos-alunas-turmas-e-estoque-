@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PublicFormConfig } from '../types';
-import { Save, ExternalLink, Layout, Type, Palette, CheckCircle } from 'lucide-react';
+import { Save, ExternalLink, Layout, Type, Palette, Copy, Link as LinkIcon } from 'lucide-react';
 import { ToastType } from './Toast';
 
 interface FormBuilderProps {
@@ -12,10 +12,16 @@ interface FormBuilderProps {
 
 const FormBuilder: React.FC<FormBuilderProps> = ({ config, onSave, onOpenPublic, onShowToast }) => {
   const [localConfig, setLocalConfig] = useState<PublicFormConfig>(config);
+  const publicLink = `${window.location.origin}${window.location.pathname}?view=form`;
 
   const handleSave = () => {
     onSave(localConfig);
     onShowToast('Configurações do formulário salvas!', 'success');
+  };
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(publicLink);
+    onShowToast('Link do formulário copiado!', 'success');
   };
 
   return (
@@ -33,6 +39,29 @@ const FormBuilder: React.FC<FormBuilderProps> = ({ config, onSave, onOpenPublic,
         </div>
 
         <div className="space-y-6">
+          {/* Link Section */}
+          <div className="p-4 bg-primary-50 dark:bg-primary-900/10 rounded-xl border border-primary-100 dark:border-primary-800/30">
+             <h3 className="text-sm font-bold text-primary-700 dark:text-primary-400 flex items-center gap-2 mb-2">
+               <LinkIcon size={16}/> Link do Formulário
+             </h3>
+             <div className="flex gap-2">
+                <input 
+                  readOnly
+                  type="text" 
+                  className="flex-1 p-2 text-xs rounded-lg border border-primary-200 bg-white dark:bg-slate-900 text-gray-500 outline-none"
+                  value={publicLink}
+                />
+                <button 
+                  onClick={copyLink}
+                  className="p-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-all"
+                  title="Copiar Link"
+                >
+                  <Copy size={16}/>
+                </button>
+             </div>
+             <p className="text-[10px] text-primary-600/70 mt-2">Compartilhe este link com suas alunas para captar leads.</p>
+          </div>
+
           {/* Texts */}
           <div className="space-y-3">
              <h3 className="text-sm font-bold text-gray-700 dark:text-dark-text flex items-center gap-2">

@@ -27,6 +27,13 @@ const App: React.FC = () => {
   // Estado Inicial
   const [data, setData] = useState<AppState>(INITIAL_DATA);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') === 'form') {
+      setCurrentView('public-form');
+    }
+  }, []);
+
   const handleOpenPaymentForStudent = (studentId: string) => {
       setPaymentStudentId(studentId);
       setCurrentView('payments');
