@@ -414,7 +414,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                                            </div>
                                        )}
                                    </div>
-                               ) : (
+                               ) : paymentMethod === 'credit' ? (
                                    <div className="space-y-3 animate-in fade-in">
                                        <div className="relative">
                                            <CreditCard className="absolute left-3 top-3.5 text-gray-400" size={18}/>
@@ -438,14 +438,14 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                                           value={cardData.holder} onChange={e => setCardData({...cardData, holder: e.target.value})}
                                        />
                                    </div>
-                               ) : paymentMethod === 'boleto' ? (
+                               ) : (
                                    <div className="text-center py-8 space-y-4 animate-in fade-in">
                                        <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
                                             <Copy size={32} />
                                        </div>
                                        <p className="text-sm text-gray-500">O boleto será gerado com vencimento para 3 dias.</p>
                                    </div>
-                               ) : null}
+                               )}
 
                                {(!pixData || (paymentMethod !== 'pix' && paymentMethod !== 'boleto')) && (
                                    <button 

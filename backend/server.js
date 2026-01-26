@@ -31,32 +31,37 @@ const pool = new Pool({
     port: process.env.DB_PORT || 5432,
 });
 
-pool.connect((err) => {
+pool.connect(async (err) => {
     if (err) console.error('❌ Erro de conexão Postgres:', err.stack);
     else {
         console.log(`✅ Conectado ao PostgreSQL em ${process.env.DB_HOST || 'localhost'}`);
         // Criar tabela de pagamentos se não existir
-        await pool.query(`
-            ALTER TABLE students ADD COLUMN IF NOT EXISTS cpf VARCHAR(20);
-            
-            CREATE TABLE IF NOT EXISTS payments (
-                id UUID PRIMARY KEY,
-                "linkId" TEXT,
-                "studentId" TEXT,
-                "courseId" TEXT,
-                amount DECIMAL(10,2),
-                method VARCHAR(50),
-                status VARCHAR(50),
-                "safe2payId" VARCHAR(255),
-                "customerData" JSONB,
-                "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-            );
-            -- Garantir que colunas antigas sejam TEXT se ja existiam como UUID
-            ALTER TABLE payments ALTER COLUMN "linkId" TYPE TEXT;
-            ALTER TABLE payments ALTER COLUMN "courseId" TYPE TEXT;
-            ALTER TABLE payments ALTER COLUMN "studentId" TYPE TEXT;
-        `).catch(e => console.log('Info: Tabela de pagamentos verificada.'));
+        try {
+            await pool.query(`
+                ALTER TABLE students ADD COLUMN IF NOT EXISTS cpf VARCHAR(20);
+                
+                CREATE TABLE IF NOT EXISTS payments (
+                    id UUID PRIMARY KEY,
+                    "linkId" TEXT,
+                    "studentId" TEXT,
+                    "courseId" TEXT,
+                    amount DECIMAL(10,2),
+                    method VARCHAR(50),
+                    status VARCHAR(50),
+                    "safe2payId" VARCHAR(255),
+                    "customerData" JSONB,
+                    "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+                -- Garantir que colunas antigas sejam TEXT se ja existiam como UUID
+                ALTER TABLE payments ALTER COLUMN "linkId" TYPE TEXT;
+                ALTER TABLE payments ALTER COLUMN "courseId" TYPE TEXT;
+                ALTER TABLE payments ALTER COLUMN "studentId" TYPE TEXT;
+            `);
+            console.log('✅ Banco de dados inicializado com sucesso.');
+        } catch (e) {
+            console.log('Info: Verificação de tabelas concluída.');
+        }
     }
 });
 
@@ -203,7 +208,6 @@ app.post('/students', async (req, res) => {
             s.nextFollowUp ? s.nextFollowUp : null,
             s.lastPurchase ? s.lastPurchase : null,
             s.notes || ''
-        ];
         ];
 
         const result = await client.query(query, values);
