@@ -375,7 +375,7 @@ app.post('/payments/create', async (req, res) => {
             const today = new Date();
             today.setDate(today.getDate() + 3); // Vencimento em 3 dias
             payload.BankSlip = {
-                DueDate: today.toISOString().split('T')[0].split('-').reverse().join('/'), // DD/MM/YYYY
+                DueDate: today.toISOString().split('T')[0], // YYYY-MM-DD
                 Instruction: 'Não receber após o vencimento',
                 Message: ['Mensalidade de Curso'],
                 PenaltyRate: 2.00,

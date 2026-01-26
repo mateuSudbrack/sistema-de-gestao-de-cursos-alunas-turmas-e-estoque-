@@ -100,6 +100,16 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
      if(!customerData.name || !customerData.phone || !customerData.email || !customerData.cpf) {
          return onShowToast("Preencha todos os dados do comprador", 'error');
      }
+
+     const cleanPhone = customerData.phone.replace(/\D/g, '');
+     if (cleanPhone.length !== 11) {
+         return onShowToast("Telefone inválido. Use o formato: 11988887777", 'error');
+     }
+
+     const cleanCPF = customerData.cpf.replace(/\D/g, '');
+     if (cleanCPF.length !== 11 && cleanCPF.length !== 14) {
+         return onShowToast("Documento (CPF/CNPJ) inválido", 'error');
+     }
      
      setIsProcessing(true);
      setPixData(null); // Limpar dados de PIX anterior
