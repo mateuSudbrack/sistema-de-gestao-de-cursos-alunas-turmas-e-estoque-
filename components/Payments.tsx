@@ -31,6 +31,18 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
   const [pixData, setPixData] = useState<{ qrCode: string, key: string } | null>(null);
   const [boletoData, setBoletoData] = useState<{ url: string, barcode: string } | null>(null);
 
+  const formatPhone = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    if (numbers.length <= 2) return numbers;
+    if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+    return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const formatted = formatPhone(e.target.value);
+      setCustomerData({ ...customerData, phone: formatted });
+  };
+
   React.useEffect(() => {
     if (preSelectedStudentId) {
         const student = students.find(s => s.id === preSelectedStudentId);
@@ -55,7 +67,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
           if (student) {
               setCustomerData({
                   name: student.name,
-                  phone: student.phone,
+                  phone: formatPhone(student.phone),
                   email: student.email || '',
                   cpf: student.cpf || ''
               });
@@ -64,6 +76,12 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
           setCustomerData({ name: '', phone: '', email: '', cpf: '' });
       }
       setCardData({ number: '', expiry: '', cvc: '', holder: '' });
+  };
+
+  const handleDeleteLinkWithConfirm = (id: string, title: string) => {
+      if (window.confirm(`Tem certeza que deseja excluir o link "${title}"?`)) {
+          onDeleteLink(id);
+      }
   };
 
   const handleCreate = () => {
@@ -178,7 +196,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
            {links.map(link => (
                <div key={link.id} className="bg-white dark:bg-dark-surface rounded-2xl p-5 border border-gray-100 dark:border-dark-border shadow-sm hover:shadow-md transition-all relative group">
                    <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                       <button onClick={() => onDeleteLink(link.id)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100"><Trash2 size={16}/></button>
+                       <button onClick={() => handleDeleteLinkWithConfirm(link.id, link.title)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100"><Trash2 size={16}/></button>
                    </div>
                    
                    <div className="flex items-center gap-3 mb-3">
@@ -346,7 +364,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                                <div className="flex gap-2">
                                    <input 
                                       className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none" placeholder="WhatsApp"
-                                      value={customerData.phone} onChange={e => setCustomerData({...customerData, phone: e.target.value})}
+                                      value={customerData.phone} onChange={handlePhoneChange}
                                    />
                                    <input 
                                       className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none" placeholder="CPF"

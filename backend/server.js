@@ -6,12 +6,9 @@ const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cors({
-    origin: 'https://sistema-de-gestao-de-cursos-alunas-three.vercel.app',
-    credentials: true
-}));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(cors());
 
 // --- CONFIGURAÇÃO ---
 const PORT = process.env.PORT || 3003;
