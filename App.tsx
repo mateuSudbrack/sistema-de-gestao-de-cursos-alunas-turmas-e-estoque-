@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { INITIAL_DATA } from './constants';
-import { AppState, View, Student, CourseClass, StudentStatus, Course, PublicFormConfig, PipelineDefinition, EvolutionConfig, AutomationConfig, PaymentLink, AutomationTrigger, StudentType } from './types';
+import { AppState, View, Student, CourseClass, StudentStatus, Course, PublicFormConfig, PipelineDefinition, EvolutionConfig, AutomationConfig, PaymentLink, AutomationTrigger, StudentType, Product } from './types';
 import Navigation from './components/Navigation';
 import Dashboard from './components/Dashboard';
 import Students from './components/Students';
@@ -219,6 +219,13 @@ const App: React.FC = () => {
       classes: prev.classes.filter(cl => cl.courseId !== id)
     }));
     addToast('Curso removido!', 'success');
+  };
+
+  const handleAddProduct = (product: Product) => {
+      setData(prev => ({
+          ...prev,
+          products: [...prev.products, product]
+      }));
   };
 
   const handleDeleteProduct = (id: string) => {
@@ -792,6 +799,7 @@ const App: React.FC = () => {
             students={data.students}
             onUpdateStock={handleUpdateStock}
             onDeleteProduct={handleDeleteProduct}
+            onAddProduct={handleAddProduct}
             onRecordSale={handleRecordSale}
             onShowToast={addToast}
           />

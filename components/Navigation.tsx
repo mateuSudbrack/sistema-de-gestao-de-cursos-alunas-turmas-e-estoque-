@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { LayoutDashboard, Users, GraduationCap, Package, Calendar, FileEdit, Sparkles, Moon, Sun, Kanban, MessageSquareText, ChevronDown, ChevronRight, UserCircle, CreditCard } from 'lucide-react';
+import { LayoutDashboard, Users, GraduationCap, Package, Calendar, FileEdit, Sparkles, Moon, Sun, Kanban, MessageSquareText, ChevronDown, ChevronRight, UserCircle, CreditCard, LogOut } from 'lucide-react';
 import { View, Theme } from '../types';
 
 interface NavigationProps {
@@ -8,9 +8,10 @@ interface NavigationProps {
   setCurrentView: (view: View) => void;
   currentTheme: Theme;
   toggleTheme: () => void;
+  onLogout: () => void;
 }
 
-const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, currentTheme, toggleTheme }) => {
+const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, currentTheme, toggleTheme, onLogout }) => {
   // State to control expanded submenus
   const [expandedGroups, setExpandedGroups] = useState<string[]>(['students-group']);
 
@@ -166,7 +167,7 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, cu
           })}
         </nav>
 
-        <div className="p-4">
+        <div className="p-4 space-y-2">
            <button 
              onClick={toggleTheme}
              className="w-full flex items-center justify-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-dark-border text-gray-500 dark:text-dark-textMuted hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
@@ -174,7 +175,16 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, cu
              {currentTheme === 'light' ? <Moon size={16}/> : <Sun size={16}/>}
              <span className="text-xs font-medium">{currentTheme === 'light' ? 'Modo Escuro' : 'Modo Claro'}</span>
            </button>
-           <p className="text-center text-[10px] text-gray-400 mt-4">Versão 1.7.0</p>
+           
+           <button 
+             onClick={onLogout}
+             className="w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 hover:bg-red-100 transition-colors"
+           >
+             <LogOut size={16}/>
+             <span className="text-xs font-bold">Sair</span>
+           </button>
+           
+           <p className="text-center text-[10px] text-gray-400 mt-2">Versão 1.8.0</p>
         </div>
       </div>
 
@@ -202,6 +212,10 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, cu
           <button onClick={toggleTheme} className="p-2 text-gray-400 dark:text-dark-textMuted min-w-[60px] flex flex-col items-center">
              {currentTheme === 'light' ? <Moon size={20}/> : <Sun size={20}/>}
              <span className="text-[10px] font-medium mt-1">Tema</span>
+          </button>
+          <button onClick={onLogout} className="p-2 text-red-400 min-w-[60px] flex flex-col items-center">
+             <LogOut size={20}/>
+             <span className="text-[10px] font-medium mt-1">Sair</span>
           </button>
         </div>
       </div>

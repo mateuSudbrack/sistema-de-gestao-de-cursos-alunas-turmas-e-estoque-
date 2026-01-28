@@ -1,29 +1,60 @@
 import React, { useState } from 'react';
 import { Product, Student, ProductCategory } from '../types';
-import { Search, ShoppingCart, AlertTriangle, Plus, Minus, Tag, Box, Store, Trash2 } from 'lucide-react';
+import { Search, ShoppingCart, AlertTriangle, Plus, Minus, Tag, Box, Store, Trash2, X, Save, Package } from 'lucide-react';
 import { ToastType } from './Toast';
+import { v4 } from 'uuid';
 
 interface InventoryProps {
   products: Product[];
   students: Student[];
+  onAddProduct: (product: Product) => void;
   onUpdateStock: (id: string, qty: number) => void;
   onDeleteProduct: (id: string) => void;
   onRecordSale: (studentId: string, items: {productId: string, qty: number}[], discount: number) => void;
   onShowToast: (message: string, type: ToastType) => void;
 }
 
-const Inventory: React.FC<InventoryProps> = ({ products, students, onUpdateStock, onDeleteProduct, onRecordSale, onShowToast }) => {
+const Inventory: React.FC<InventoryProps> = ({ products, students, onAddProduct, onUpdateStock, onDeleteProduct, onRecordSale, onShowToast }) => {
   const [activeTab, setActiveTab] = useState<ProductCategory>('retail');
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<{productId: string, qty: number}[]>([]);
   const [selectedStudent, setSelectedStudent] = useState('');
   const [discount, setDiscount] = useState<string>('');
+  
+  // Modal State
+  const [showModal, setShowModal] = useState(false);
+  const [newProduct, setNewProduct] = useState<Partial<Product>>({
+      category: 'retail',
+      quantity: 0,
+      minStock: 5
+  });
 
   const filteredProducts = products.filter(p => {
       const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = p.category === activeTab;
       return matchesSearch && matchesCategory;
   });
+
+  const handleSaveProduct = () => {
+      if (!newProduct.name || !newProduct.costPrice) {
+          return onShowToast('Preencha nome e preço de custo.', 'error');
+      }
+      
+      const product: Product = {
+          id: v4(),
+          name: newProduct.name,
+          category: newProduct.category || 'retail',
+          costPrice: Number(newProduct.costPrice),
+          sellPrice: Number(newProduct.sellPrice || 0),
+          quantity: Number(newProduct.quantity || 0),
+          minStock: Number(newProduct.minStock || 0)
+      };
+
+      onAddProduct(product);
+      setShowModal(false);
+      setNewProduct({ category: 'retail', quantity: 0, minStock: 5 });
+      onShowToast('Produto cadastrado!', 'success');
+  };
 
   const addToCart = (product: Product) => {
     if (product.quantity <= 0) {
@@ -73,15 +104,23 @@ const Inventory: React.FC<InventoryProps> = ({ products, students, onUpdateStock
       <div className="lg:col-span-2 flex flex-col gap-4 overflow-hidden">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <h2 className="text-2xl font-bold text-gray-800 dark:text-dark-text">Gestão de Estoque</h2>
-          <div className="relative w-full md:w-auto">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input
-              type="text"
-              placeholder="Buscar item..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text focus:outline-none focus:ring-2 focus:ring-primary-200 w-full md:w-64"
-            />
+          <div className="flex gap-2 w-full md:w-auto">
+            <div className="relative flex-1 md:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                type="text"
+                placeholder="Buscar item..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text focus:outline-none focus:ring-2 focus:ring-primary-200"
+                />
+            </div>
+            <button 
+                onClick={() => setShowModal(true)}
+                className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-md transition-all whitespace-nowrap"
+            >
+                <Plus size={20}/> <span className="hidden sm:inline">Novo Produto</span>
+            </button>
           </div>
         </div>
 
@@ -257,6 +296,89 @@ const Inventory: React.FC<InventoryProps> = ({ products, students, onUpdateStock
           </button>
         </div>
       </div>
+
+      {/* Modal Novo Produto */}
+      {showModal && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white dark:bg-dark-surface rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-4 animate-in zoom-in-95">
+                  <div className="flex justify-between items-center border-b border-gray-100 dark:border-dark-border pb-4">
+                      <h3 className="text-lg font-bold text-gray-800 dark:text-dark-text flex items-center gap-2">
+                          <Package size={20} className="text-primary-500"/> Novo Produto
+                      </h3>
+                      <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><X size={20}/></button>
+                  </div>
+                  
+                  <div className="space-y-3">
+                      <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Nome do Produto</label>
+                          <input 
+                              className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text focus:ring-2 focus:ring-primary-200 outline-none"
+                              value={newProduct.name || ''}
+                              onChange={e => setNewProduct({...newProduct, name: e.target.value})}
+                          />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                          <div>
+                              <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Custo (R$)</label>
+                              <input 
+                                  type="number"
+                                  className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text focus:ring-2 focus:ring-primary-200 outline-none"
+                                  value={newProduct.costPrice || ''}
+                                  onChange={e => setNewProduct({...newProduct, costPrice: Number(e.target.value)})}
+                              />
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Venda (R$)</label>
+                              <input 
+                                  type="number"
+                                  className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text focus:ring-2 focus:ring-primary-200 outline-none"
+                                  value={newProduct.sellPrice || ''}
+                                  onChange={e => setNewProduct({...newProduct, sellPrice: Number(e.target.value)})}
+                              />
+                          </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                          <div>
+                              <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Estoque Atual</label>
+                              <input 
+                                  type="number"
+                                  className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text focus:ring-2 focus:ring-primary-200 outline-none"
+                                  value={newProduct.quantity || ''}
+                                  onChange={e => setNewProduct({...newProduct, quantity: Number(e.target.value)})}
+                              />
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Estoque Mínimo</label>
+                              <input 
+                                  type="number"
+                                  className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text focus:ring-2 focus:ring-primary-200 outline-none"
+                                  value={newProduct.minStock || ''}
+                                  onChange={e => setNewProduct({...newProduct, minStock: Number(e.target.value)})}
+                              />
+                          </div>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Categoria</label>
+                          <select 
+                              className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text focus:ring-2 focus:ring-primary-200 outline-none"
+                              value={newProduct.category}
+                              onChange={e => setNewProduct({...newProduct, category: e.target.value as ProductCategory})}
+                          >
+                              <option value="retail">Venda (Varejo)</option>
+                              <option value="internal">Uso Interno (Material)</option>
+                          </select>
+                      </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                      <button onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">Cancelar</button>
+                      <button onClick={handleSaveProduct} className="px-6 py-2 bg-primary-600 text-white rounded-lg font-bold shadow-md hover:bg-primary-700 flex items-center gap-2">
+                          <Save size={18}/> Salvar
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };
