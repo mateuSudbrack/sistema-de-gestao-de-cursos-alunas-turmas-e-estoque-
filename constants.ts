@@ -5,13 +5,16 @@ export const SYSTEM_PIPELINE_ID = 'default-system-pipeline';
 
 export const INITIAL_DATA: AppState = {
   theme: 'light',
-  formConfig: {
-    title: 'Inscrição - Estética Pro',
-    subtitle: 'Preencha seus dados para iniciar sua jornada na beleza.',
-    primaryColor: '#f43f5e',
-    backgroundColor: '#ffffff',
-    buttonText: 'Quero me Inscrever!'
-  },
+  forms: [
+    {
+      id: 'default-form',
+      title: 'Inscrição - Estética Pro',
+      subtitle: 'Preencha seus dados para iniciar sua jornada na beleza.',
+      primaryColor: '#f43f5e',
+      backgroundColor: '#ffffff',
+      buttonText: 'Quero me Inscrever!'
+    }
+  ],
   evolutionConfig: {
     instanceName: '',
     apiKey: '',

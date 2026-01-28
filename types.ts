@@ -99,6 +99,7 @@ export interface Sale {
 }
 
 export interface PublicFormConfig {
+  id: string;
   title: string;
   subtitle: string;
   primaryColor: string;
@@ -154,7 +155,7 @@ export interface AppState {
   sales: Sale[];
   pipelines: PipelineDefinition[];
   defaultPipelineId: string;
-  formConfig: PublicFormConfig;
+  forms: PublicFormConfig[];
   evolutionConfig: EvolutionConfig;
   automations: AutomationConfig;
   paymentLinks: PaymentLink[];

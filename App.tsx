@@ -14,6 +14,7 @@ import Payments from './components/Payments';
 import ToastContainer, { ToastMessage, ToastType } from './components/Toast';
 import { evolutionService } from './services/evolutionService';
 import { v4 } from 'uuid';
+import { Lock, Mail, Key } from 'lucide-react';
 
 // URL da API Backend
 const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'https://certificados.digiyou.com.br/api/service';
@@ -22,8 +23,15 @@ const App: React.FC = () => {
   console.log('Rendering App component');
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [paymentStudentId, setPaymentStudentId] = useState<string | null>(null);
   
+  // Auth State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [publicFormId, setPublicFormId] = useState<string | null>(null);
+
   // Estado Inicial
   const [data, setData] = useState<AppState>(INITIAL_DATA);
 
@@ -31,15 +39,34 @@ const App: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('view') === 'form') {
       setCurrentView('public-form');
+      setPublicFormId(params.get('id'));
+    } else {
+        const storedAuth = localStorage.getItem('app_auth');
+        if (storedAuth === 'true') setIsAuthenticated(true);
     }
   }, []);
+
+  const handleLogin = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (emailInput === 'vitoriaraqueeel@gmail.com' && passwordInput === 'And.2099@') {
+          setIsAuthenticated(true);
+          localStorage.setItem('app_auth', 'true');
+          addToast('Login realizado com sucesso!', 'success');
+      } else {
+          addToast('Credenciais inválidas.', 'error');
+      }
+  };
+
+  const handleLogout = () => {
+      setIsAuthenticated(false);
+      localStorage.removeItem('app_auth');
+      window.location.href = '/';
+  };
 
   const handleOpenPaymentForStudent = (studentId: string) => {
       setPaymentStudentId(studentId);
       setCurrentView('payments');
   };
-
-  console.log('Current state:', { loading, currentView, theme: data.theme });
 
   // --- 1. CARREGAR DADOS DO SERVIDOR AO INICIAR ---
   useEffect(() => {
@@ -75,11 +102,17 @@ const App: React.FC = () => {
              notes: s.notes || ''
           }));
 
+          // Migração de FormConfig antigo para Forms Array
+          let loadedForms = globalData.forms || [];
+          if (!loadedForms.length && globalData.formConfig) {
+              loadedForms = [{ ...globalData.formConfig, id: 'default-legacy' }];
+          }
+          if (!loadedForms.length) loadedForms = INITIAL_DATA.forms;
+
           // Atualizar Estado com Dados Reais
           setData(prev => ({
              ...prev,
              students: processedStudents.length > 0 ? processedStudents : prev.students,
-             // Se houver dados globais salvos, usa eles. Se não, usa o inicial.
              courses: globalData.courses || prev.courses,
              classes: globalData.classes || prev.classes,
              products: globalData.products || prev.products,
@@ -87,7 +120,8 @@ const App: React.FC = () => {
              pipelines: globalData.pipelines || prev.pipelines,
              automations: globalData.automations || prev.automations,
              paymentLinks: globalData.paymentLinks || prev.paymentLinks,
-             evolutionConfig: globalData.evolutionConfig || prev.evolutionConfig
+             evolutionConfig: globalData.evolutionConfig || prev.evolutionConfig,
+             forms: loadedForms
           }));
           console.log("✅ Dados sincronizados com sucesso!");
         } else {
@@ -107,12 +141,27 @@ const App: React.FC = () => {
   // --- 2. SALVAR ESTADO GLOBAL NO SERVIDOR ---
   const saveTimeoutRef = useRef<number | null>(null);
 
+  const saveGlobalState = async (state: any) => {
+    setIsSaving(true);
+    try {
+       await fetch(`${API_BASE_URL}/sync/global`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(state)
+       });
+    } catch (e) {
+       console.warn("Erro ao salvar estado global", e);
+    } finally {
+       setTimeout(() => setIsSaving(false), 500);
+    }
+  };
+
   useEffect(() => {
     if (loading) return; 
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
-    saveTimeoutRef.current = setTimeout(async () => {
+    saveTimeoutRef.current = setTimeout(() => {
        const globalState = {
           courses: data.courses,
           classes: data.classes,
@@ -121,21 +170,13 @@ const App: React.FC = () => {
           pipelines: data.pipelines,
           automations: data.automations,
           paymentLinks: data.paymentLinks,
-          evolutionConfig: data.evolutionConfig
+          evolutionConfig: data.evolutionConfig,
+          forms: data.forms
        };
+       saveGlobalState(globalState);
+    }, 800) as unknown as number;
 
-       try {
-          await fetch(`${API_BASE_URL}/sync/global`, {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify(globalState)
-          });
-       } catch (e) {
-          console.warn("Erro ao salvar estado global", e);
-       }
-    }, 2000) as unknown as number;
-
-  }, [data.courses, data.classes, data.products, data.sales, data.pipelines, data.automations, data.paymentLinks, data.evolutionConfig, loading]);
+  }, [data.courses, data.classes, data.products, data.sales, data.pipelines, data.automations, data.paymentLinks, data.evolutionConfig, data.forms, loading]);
 
 
   // --- 3. FUNÇÕES DE SYNC INDIVIDUAL (ALUNOS) ---
@@ -175,18 +216,34 @@ const App: React.FC = () => {
     setData(prev => ({
       ...prev,
       courses: prev.courses.filter(c => c.id !== id),
-      // Also remove classes associated with this course
       classes: prev.classes.filter(cl => cl.courseId !== id)
     }));
     addToast('Curso removido!', 'success');
   };
 
   const handleDeleteProduct = (id: string) => {
-    setData(prev => ({
-      ...prev,
-      products: prev.products.filter(p => p.id !== id)
-    }));
-    addToast('Item removido do estoque!', 'success');
+    if (window.confirm('Tem certeza que deseja excluir este produto?')) {
+        setData(prev => ({
+        ...prev,
+        products: prev.products.filter(p => p.id !== id)
+        }));
+        // Forçar salvamento imediato
+        setTimeout(() => {
+            const globalState = {
+                courses: data.courses,
+                classes: data.classes,
+                products: data.products.filter(p => p.id !== id),
+                sales: data.sales,
+                pipelines: data.pipelines,
+                automations: data.automations,
+                paymentLinks: data.paymentLinks,
+                evolutionConfig: data.evolutionConfig,
+                forms: data.forms
+            };
+            saveGlobalState(globalState);
+        }, 100);
+        addToast('Item removido do estoque!', 'success');
+    }
   };
 
   // --- RESTO DO CÓDIGO (HANDLERS) ---
@@ -319,8 +376,8 @@ const App: React.FC = () => {
     }));
   };
 
-  const handleSaveFormConfig = (config: PublicFormConfig) => {
-    setData(prev => ({ ...prev, formConfig: config }));
+  const handleSaveForms = (forms: PublicFormConfig[]) => {
+    setData(prev => ({ ...prev, forms }));
   };
 
   const handleSaveEvolutionConfig = (config: EvolutionConfig) => {
@@ -425,6 +482,21 @@ const App: React.FC = () => {
 
   const handleDeleteLink = (id: string) => {
       setData(prev => ({ ...prev, paymentLinks: prev.paymentLinks.filter(l => l.id !== id) }));
+      // Forçar salvamento imediato para deletar
+      setTimeout(() => {
+          const globalState = {
+              courses: data.courses,
+              classes: data.classes,
+              products: data.products,
+              sales: data.sales,
+              pipelines: data.pipelines,
+              automations: data.automations,
+              paymentLinks: data.paymentLinks.filter(l => l.id !== id),
+              evolutionConfig: data.evolutionConfig,
+              forms: data.forms
+          };
+          saveGlobalState(globalState);
+      }, 100);
   };
 
   const handleGeneratePaymentLink = (courseId: string) => {
@@ -540,18 +612,20 @@ const App: React.FC = () => {
       }
   };
 
+  // --- PUBLIC FORM VIEW ---
   if (currentView === 'public-form') {
-      const { formConfig } = data;
-      return (
-        <div className="min-h-screen flex items-center justify-center p-4 font-sans transition-colors" style={{ backgroundColor: formConfig.backgroundColor }}>
-           <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-               <div className="h-2 w-full" style={{ backgroundColor: formConfig.primaryColor }}></div>
-               <div className="p-8 space-y-6">
-                    <button onClick={() => setCurrentView('form-builder')} className="mb-4 text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">← Voltar</button>
+      const activeForm = data.forms.find(f => f.id === publicFormId) || data.forms[0];
+      
+      if (!activeForm) return <div className="p-10 text-center">Formulário não encontrado.</div>;
 
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4 font-sans transition-colors" style={{ backgroundColor: activeForm.backgroundColor }}>
+           <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+               <div className="h-2 w-full" style={{ backgroundColor: activeForm.primaryColor }}></div>
+               <div className="p-8 space-y-6">
                    <div className="text-center space-y-2">
-                       <h1 className="text-3xl font-bold text-gray-800">{formConfig.title}</h1>
-                       <p className="text-gray-500">{formConfig.subtitle}</p>
+                       <h1 className="text-3xl font-bold text-gray-800">{activeForm.title}</h1>
+                       <p className="text-gray-500">{activeForm.subtitle}</p>
                    </div>
 
                    <form className="space-y-4" onSubmit={(e) => {
@@ -565,15 +639,15 @@ const App: React.FC = () => {
                    }}>
                        <div>
                            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">Nome Completo</label>
-                           <input required name="name" type="text" className="w-full p-3 rounded-lg border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-opacity-50" style={{ '--tw-ring-color': formConfig.primaryColor } as any} />
+                           <input required name="name" type="text" className="w-full p-3 rounded-lg border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-opacity-50" style={{ '--tw-ring-color': activeForm.primaryColor } as any} />
                        </div>
                        <div>
                            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">WhatsApp</label>
-                           <input required name="phone" type="tel" className="w-full p-3 rounded-lg border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-opacity-50" style={{ '--tw-ring-color': formConfig.primaryColor } as any} />
+                           <input required name="phone" type="tel" className="w-full p-3 rounded-lg border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-opacity-50" style={{ '--tw-ring-color': activeForm.primaryColor } as any} />
                        </div>
                        <div>
                            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">Curso de Interesse</label>
-                           <select required name="course" className="w-full p-3 rounded-lg border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-opacity-50" style={{ '--tw-ring-color': formConfig.primaryColor } as any}>
+                           <select required name="course" className="w-full p-3 rounded-lg border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-opacity-50" style={{ '--tw-ring-color': activeForm.primaryColor } as any}>
                                <option value="">Selecione...</option>
                                {data.courses.map(c => (
                                    <option key={c.id} value={c.id}>{c.name}</option>
@@ -583,9 +657,9 @@ const App: React.FC = () => {
                        <button 
                          type="submit"
                          className="w-full py-3.5 rounded-lg text-white font-bold text-center shadow-lg hover:opacity-90 transition-opacity mt-6"
-                         style={{ backgroundColor: formConfig.primaryColor }}
+                         style={{ backgroundColor: activeForm.primaryColor }}
                        >
-                         {formConfig.buttonText}
+                         {activeForm.buttonText}
                        </button>
                    </form>
                </div>
@@ -595,13 +669,68 @@ const App: React.FC = () => {
       )
   }
 
+  // --- LOGIN VIEW ---
+  if (!isAuthenticated) {
+      return (
+          <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 font-sans">
+              <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm animate-in fade-in zoom-in-95">
+                  <div className="text-center mb-6">
+                      <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4 text-primary-600">
+                          <Lock size={32}/>
+                      </div>
+                      <h1 className="text-2xl font-bold text-gray-800">Acesso Restrito</h1>
+                      <p className="text-gray-500 text-sm">Faça login para gerenciar o sistema.</p>
+                  </div>
+                  <form onSubmit={handleLogin} className="space-y-4">
+                      <div className="space-y-1">
+                          <label className="text-xs font-bold text-gray-500 uppercase">E-mail</label>
+                          <div className="relative">
+                              <Mail className="absolute left-3 top-3 text-gray-400" size={18}/>
+                              <input 
+                                type="email" 
+                                className="w-full pl-10 p-3 rounded-lg border border-gray-200 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                                placeholder="seu@email.com"
+                                value={emailInput}
+                                onChange={e => setEmailInput(e.target.value)}
+                              />
+                          </div>
+                      </div>
+                      <div className="space-y-1">
+                          <label className="text-xs font-bold text-gray-500 uppercase">Senha</label>
+                          <div className="relative">
+                              <Key className="absolute left-3 top-3 text-gray-400" size={18}/>
+                              <input 
+                                type="password" 
+                                className="w-full pl-10 p-3 rounded-lg border border-gray-200 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                                placeholder="••••••••"
+                                value={passwordInput}
+                                onChange={e => setPasswordInput(e.target.value)}
+                              />
+                          </div>
+                      </div>
+                      <button className="w-full bg-primary-600 text-white py-3 rounded-lg font-bold hover:bg-primary-700 transition-all shadow-md mt-2">
+                          Entrar
+                      </button>
+                  </form>
+              </div>
+              <ToastContainer toasts={toasts} removeToast={removeToast} />
+          </div>
+      );
+  }
+
+  // --- MAIN APP VIEW ---
   return (
     <div className="min-h-screen bg-[#f8fafc] dark:bg-dark-bg text-gray-800 dark:text-dark-text font-sans transition-colors duration-300">
+      {isSaving && (
+          <div className="fixed top-0 left-0 right-0 h-1 bg-primary-500 z-[100] animate-pulse"></div>
+      )}
+      
       <Navigation 
          currentView={currentView} 
          setCurrentView={setCurrentView} 
          currentTheme={data.theme}
          toggleTheme={toggleTheme}
+         onLogout={handleLogout}
       />
       
       <main className="md:pl-64 p-4 md:p-8 max-w-[1920px] mx-auto min-h-screen transition-all duration-300 ease-in-out">
@@ -695,9 +824,11 @@ const App: React.FC = () => {
 
         {currentView === 'form-builder' && (
             <FormBuilder 
-              config={data.formConfig} 
-              onSave={handleSaveFormConfig}
-              onOpenPublic={() => setCurrentView('public-form')}
+              forms={data.forms} 
+              onSaveForms={handleSaveForms}
+              onOpenPublic={(id) => {
+                  window.open(`${window.location.origin}${window.location.pathname}?view=form&id=${id}`, '_blank');
+              }}
               onShowToast={addToast}
             />
         )}
