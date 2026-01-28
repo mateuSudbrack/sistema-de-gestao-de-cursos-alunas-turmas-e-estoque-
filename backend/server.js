@@ -3,12 +3,33 @@ const axios = require('axios');
 const cors = require('cors');
 const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cors());
+
+// Configuração do Multer para Uploads
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const uploadPath = path.join(__dirname, 'uploads');
+        if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+        }
+        cb(null, uploadPath);
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + '-' + file.originalname.replace(/\s/g, '_'));
+    }
+});
+const upload = multer({ storage: storage });
+
+// Servir arquivos estáticos (comprovantes)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // --- CONFIGURAÇÃO ---
 const PORT = process.env.PORT || 3003;
@@ -46,6 +67,7 @@ pool.connect(async (err) => {
                     method VARCHAR(50),
                     status VARCHAR(50),
                     "safe2payId" VARCHAR(255),
+                    "proofUrl" TEXT,
                     "customerData" JSONB,
                     "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                     "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -54,6 +76,7 @@ pool.connect(async (err) => {
                 ALTER TABLE payments ALTER COLUMN "linkId" TYPE TEXT;
                 ALTER TABLE payments ALTER COLUMN "courseId" TYPE TEXT;
                 ALTER TABLE payments ALTER COLUMN "studentId" TYPE TEXT;
+                ALTER TABLE payments ADD COLUMN IF NOT EXISTS "proofUrl" TEXT;
             `);
             console.log('✅ Banco de dados inicializado com sucesso.');
         } catch (e) {
@@ -590,6 +613,176 @@ app.post('/payments/webhook', async (req, res) => {
         res.status(200).send('OK');
     } catch (error) {
         console.error('❌ Erro no webhook Safe2Pay:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- ROTA DE PAGAMENTO MANUAL COM COMPROVANTE ---
+app.post('/payments/manual', upload.single('proof'), async (req, res) => {
+    try {
+        // Dados vêm em req.body como strings devido ao FormData, precisa parsear
+        const data = JSON.parse(req.body.data); 
+        const { linkId, customer } = data;
+        const file = req.file;
+
+        if (!file) {
+            return res.status(400).json({ error: 'Comprovante é obrigatório.' });
+        }
+
+        // Tenta determinar a URL base
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const host = req.headers['host'];
+        // Ajuste para servir arquivos corretamente
+        const fileUrl = `${protocol}://${host}/api/service/uploads/${file.filename}`;
+
+        const paymentId = uuidv4();
+        const link = typeof data.link === 'string' ? JSON.parse(data.link) : data.link;
+
+        await pool.query(
+            `INSERT INTO payments (id, "linkId", "courseId", amount, method, status, "proofUrl", "customerData")
+             VALUES ($1, $2, $3, $4, 'manual', 'pending_review', $5, $6)`,
+            [
+                paymentId, 
+                link.id, 
+                link.courseId || null, 
+                link.amount, 
+                fileUrl, 
+                JSON.stringify({ ...customer, linkId: link.id, courseId: link.courseId })
+            ]
+        );
+
+        // Se tiver CPF, atualiza
+        if (customer.cpf) {
+            const cleanCPF = customer.cpf.replace(/\D/g, '');
+            const phone = customer.phone.replace(/\D/g, '');
+            pool.query(
+                'UPDATE students SET cpf = $1 WHERE (REPLACE(REPLACE(REPLACE(phone, \' \', \'\'), \'-\', \'\'), \'+55\', \'\') LIKE $2) AND (cpf IS NULL OR cpf = \'\')',
+                [cleanCPF, `%${phone.slice(-8)}`]
+            ).catch(e => console.error('Erro ao atualizar CPF:', e));
+        }
+
+        res.json({ success: true, message: 'Pagamento enviado para análise.' });
+
+    } catch (error) {
+        console.error('❌ Erro no pagamento manual:', error);
+        res.status(500).json({ error: 'Erro ao processar envio.' });
+    }
+});
+
+// --- LISTAR PAGAMENTOS PENDENTES (MANUAIS) ---
+app.get('/payments/pending', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT * FROM payments 
+            WHERE status = 'pending_review' 
+            ORDER BY "createdAt" DESC
+        `);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Erro ao listar pendentes:', error);
+        res.status(500).json({ error: 'Erro interno' });
+    }
+});
+
+// --- APROVAR PAGAMENTO MANUAL ---
+app.post('/payments/:id/approve', async (req, res) => {
+    const { id } = req.params;
+    try {
+        // 1. Buscar pagamento
+        const payRes = await pool.query('SELECT * FROM payments WHERE id = $1', [id]);
+        if (payRes.rows.length === 0) return res.status(404).json({ error: 'Pagamento não encontrado' });
+        
+        const payment = payRes.rows[0];
+        if (payment.status === 'paid') return res.json({ success: true, message: 'Já aprovado' });
+
+        // 2. Atualizar status
+        await pool.query('UPDATE payments SET status = \'paid\', "updatedAt" = NOW() WHERE id = $1', [id]);
+
+        // 3. Processar Matrícula (Lógica duplicada do webhook, idealmente refatorar para função)
+        const customer = payment.customerData; // pg faz parse auto de jsonb
+        const phone = customer.phone.replace(/\D/g, '');
+        const courseId = payment.courseId;
+
+        // Buscar/Criar Aluno
+        let student;
+        const studentRes = await pool.query('SELECT * FROM students WHERE REPLACE(REPLACE(REPLACE(phone, \' \', \'\'), \'-\', \'\'), \'+55\', \'\') LIKE $1', [`%${phone.slice(-8)}`]);
+        
+        if (studentRes.rows.length > 0) {
+            student = studentRes.rows[0];
+        } else {
+            const newId = uuidv4();
+            const insertRes = await pool.query(
+                `INSERT INTO students (id, name, phone, email, type, status, history, notes)
+                 VALUES ($1, $2, $3, $4, 'student', 'Ativo', '[]', 'Criado via Aprovação Manual')
+                 RETURNING *`,
+                [newId, customer.name, phone, customer.email]
+            );
+            student = insertRes.rows[0];
+        }
+
+        // Matricular
+        let history = student.history || [];
+        if (courseId) {
+            const globalRes = await pool.query("SELECT data FROM app_settings WHERE key = 'GLOBAL_STATE'");
+            if (globalRes.rows.length > 0) {
+                const globalData = globalRes.rows[0].data;
+                const classes = globalData.classes || [];
+                const openClass = classes
+                    .filter(c => c.courseId === courseId && c.status === 'open')
+                    .sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())[0];
+                
+                if (openClass) {
+                    if (!openClass.enrolledStudentIds.includes(student.id)) {
+                        openClass.enrolledStudentIds.push(student.id);
+                        globalData.classes = classes;
+                        await pool.query(
+                            "UPDATE app_settings SET data = $1 WHERE key = 'GLOBAL_STATE'",
+                            [globalData]
+                        );
+                    }
+                    if (!history.some(h => h.classId === openClass.id)) {
+                        history.push({
+                            courseId: courseId,
+                            classId: openClass.id,
+                            date: new Date().toISOString().split('T')[0],
+                            paid: parseFloat(payment.amount),
+                            status: 'paid'
+                        });
+                    }
+                } else {
+                    history.push({
+                        courseId: courseId,
+                        date: new Date().toISOString().split('T')[0],
+                        paid: parseFloat(payment.amount),
+                        status: 'paid',
+                        notes: 'Aprovado manualmente (Sem turma aberta)'
+                    });
+                }
+            }
+        } else {
+            history.push({
+                date: new Date().toISOString().split('T')[0],
+                paid: parseFloat(payment.amount),
+                status: 'paid',
+                notes: 'Pagamento Avulso Aprovado Manualmente'
+            });
+        }
+
+        await pool.query(
+            'UPDATE students SET type = \'student\', status = \'Ativo\', history = $1, "lastPurchase" = NOW(), "updatedAt" = NOW() WHERE id = $2',
+            [JSON.stringify(history), student.id]
+        );
+
+        // Automações
+        try {
+            await triggerAutomation('payment_confirmed', student);
+            if (courseId) await triggerAutomation('enrollment_created', student);
+        } catch (e) { console.error(e); }
+
+        res.json({ success: true });
+
+    } catch (error) {
+        console.error('Erro na aprovação:', error);
         res.status(500).json({ error: error.message });
     }
 });

@@ -140,7 +140,7 @@ export interface PaymentLink {
   courseId?: string; // Se vinculado a um curso
   studentId?: string; // Se vinculado a uma aluna específica
   photoUrl?: string;
-  methods: ('pix' | 'credit')[];
+  methods: ('pix' | 'credit' | 'manual')[];
   active: boolean;
   clicks: number;
 }

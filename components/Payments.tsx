@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PaymentLink, Course } from '../types';
-import { CreditCard, QrCode, Plus, Copy, Trash2, ExternalLink, Smartphone, CheckCircle, Lock } from 'lucide-react';
+import { CreditCard, QrCode, Plus, Copy, Trash2, ExternalLink, Smartphone, CheckCircle, Lock, AlertTriangle } from 'lucide-react';
 import { ToastType } from './Toast';
 import { v4 } from 'uuid';
 
@@ -26,10 +26,36 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
   const [checkoutStep, setCheckoutStep] = useState<'details' | 'payment' | 'success'>('details');
   const [customerData, setCustomerData] = useState({ name: '', phone: '', email: '', cpf: '' });
   const [cardData, setCardData] = useState({ number: '', expiry: '', cvc: '', holder: '' });
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit' | 'boleto'>('pix');
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit' | 'boleto' | 'manual'>('pix');
   const [isProcessing, setIsProcessing] = useState(false);
   const [pixData, setPixData] = useState<{ qrCode: string, key: string } | null>(null);
   const [boletoData, setBoletoData] = useState<{ url: string, barcode: string } | null>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [pendingPayments, setPendingPayments] = useState<any[]>([]);
+
+  // Carregar pagamentos pendentes ao iniciar
+  React.useEffect(() => {
+      fetch(`${(import.meta as any).env?.VITE_API_URL || 'https://certificados.digiyou.com.br/api/service'}/payments/pending`)
+        .then(res => res.json())
+        .then(data => setPendingPayments(Array.isArray(data) ? data : []))
+        .catch(console.error);
+  }, []);
+
+  const handleApprovePayment = async (id: string) => {
+      if (!window.confirm('Confirma o recebimento deste pagamento?')) return;
+      try {
+          const res = await fetch(`${(import.meta as any).env?.VITE_API_URL || 'https://certificados.digiyou.com.br/api/service'}/payments/${id}/approve`, { method: 'POST' });
+          const data = await res.json();
+          if (data.success) {
+              onShowToast('Pagamento aprovado e aluna matriculada!', 'success');
+              setPendingPayments(prev => prev.filter(p => p.id !== id));
+          } else {
+              onShowToast(data.error || 'Erro ao aprovar', 'error');
+          }
+      } catch (e) {
+          onShowToast('Erro de conexão', 'error');
+      }
+  };
 
   const formatPhone = (value: string) => {
     const numbers = value.replace(/\D/g, '');
@@ -128,15 +154,19 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
      if (cleanCPF.length !== 11 && cleanCPF.length !== 14) {
          return onShowToast("Documento (CPF/CNPJ) inválido", 'error');
      }
+
+     if (paymentMethod === 'manual' && !proofFile) {
+         return onShowToast("Por favor, anexe o comprovante.", 'error');
+     }
      
      setIsProcessing(true);
      setPixData(null); // Limpar dados de PIX anterior
      
      try {
-         const response = await fetch(`${(import.meta as any).env?.VITE_API_URL || 'https://certificados.digiyou.com.br/api/service'}/payments/create`, {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({
+         let response;
+         if (paymentMethod === 'manual') {
+             const formData = new FormData();
+             formData.append('data', JSON.stringify({
                  link: activeCheckoutLink,
                  customer: {
                      ...customerData,
@@ -144,10 +174,31 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                      cardExpiry: cardData.expiry,
                      cardCVC: cardData.cvc,
                      cardHolder: cardData.holder
-                 },
-                 method: paymentMethod
-             })
-         });
+                 }
+             }));
+             if (proofFile) formData.append('proof', proofFile);
+
+             response = await fetch(`${(import.meta as any).env?.VITE_API_URL || 'https://certificados.digiyou.com.br/api/service'}/payments/manual`, {
+                 method: 'POST',
+                 body: formData
+             });
+         } else {
+             response = await fetch(`${(import.meta as any).env?.VITE_API_URL || 'https://certificados.digiyou.com.br/api/service'}/payments/create`, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({
+                     link: activeCheckoutLink,
+                     customer: {
+                         ...customerData,
+                         cardNumber: cardData.number,
+                         cardExpiry: cardData.expiry,
+                         cardCVC: cardData.cvc,
+                         cardHolder: cardData.holder
+                     },
+                     method: paymentMethod
+                 })
+             });
+         }
 
          const result = await response.json();
 
@@ -164,6 +215,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                     setCheckoutStep('details');
                     setCustomerData({ name: '', phone: '', email: '', cpf: '' });
                     setCardData({ number: '', expiry: '', cvc: '', holder: '' });
+                    setProofFile(null);
                  }, 4000);
              }
          } else {
@@ -190,6 +242,47 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
              <Plus size={20}/> Criar Link
           </button>
        </div>
+
+       {/* Pending Payments (Admin) */}
+       {pendingPayments.length > 0 && (
+           <div className="mb-8 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 rounded-2xl p-6">
+               <h3 className="text-lg font-bold text-amber-800 dark:text-amber-400 mb-4 flex items-center gap-2">
+                   <AlertTriangle size={20}/> Pagamentos Pendentes de Aprovação
+               </h3>
+               <div className="grid gap-4">
+                   {pendingPayments.map(p => {
+                       const customer = typeof p.customerData === 'string' ? JSON.parse(p.customerData) : p.customerData;
+                       return (
+                           <div key={p.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-amber-100 dark:border-slate-700 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm">
+                               <div>
+                                   <div className="font-bold text-gray-800 dark:text-dark-text">{customer.name}</div>
+                                   <div className="text-sm text-gray-500">{customer.email} • {customer.phone}</div>
+                                   <div className="text-xs text-amber-600 font-medium mt-1">Valor: {formatCurrency(parseFloat(p.amount))}</div>
+                               </div>
+                               <div className="flex gap-2 w-full md:w-auto">
+                                   {p.proofUrl && (
+                                       <a 
+                                         href={p.proofUrl} 
+                                         target="_blank" 
+                                         rel="noreferrer"
+                                         className="flex-1 md:flex-none px-4 py-2 bg-blue-50 text-blue-600 rounded-lg text-sm font-bold hover:bg-blue-100 flex items-center justify-center gap-2"
+                                       >
+                                           <ExternalLink size={16}/> Ver Comprovante
+                                       </a>
+                                   )}
+                                   <button 
+                                     onClick={() => handleApprovePayment(p.id)}
+                                     className="flex-1 md:flex-none px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 shadow-sm flex items-center justify-center gap-2"
+                                   >
+                                       <CheckCircle size={16}/> Aprovar
+                                   </button>
+                               </div>
+                           </div>
+                       )
+                   })}
+               </div>
+           </div>
+       )}
 
        {/* Links Grid */}
        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -401,10 +494,16 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                                        Cartão
                                    </button>
                                    <button 
-                                      onClick={() => { setPaymentMethod('boleto'); setPixData(null); setBoletoData(null); }}
+                                      onClick={() => { setPaymentMethod('boleto'); setPixData(null); setBoletoData(null); setProofFile(null); }}
                                       className={`flex-1 py-2 rounded-md font-bold text-sm transition-all ${paymentMethod === 'boleto' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                                    >
                                        Boleto
+                                   </button>
+                                   <button 
+                                      onClick={() => { setPaymentMethod('manual'); setPixData(null); setBoletoData(null); }}
+                                      className={`flex-1 py-2 rounded-md font-bold text-sm transition-all ${paymentMethod === 'manual' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                   >
+                                       Manual
                                    </button>
                                </div>
 
@@ -473,6 +572,25 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                                        </div>
                                        <p className="text-sm text-gray-500">O boleto será gerado com vencimento para 3 dias.</p>
                                    </div>
+                               ) : (
+                                   <div className="space-y-4 animate-in fade-in">
+                                       <div className="bg-orange-50 border border-orange-100 p-4 rounded-lg">
+                                           <p className="text-xs text-orange-800 font-medium mb-2">Dados para Transferência:</p>
+                                           <p className="text-sm text-gray-700">Banco: <strong>Nubank</strong></p>
+                                           <p className="text-sm text-gray-700">Agência: <strong>0001</strong></p>
+                                           <p className="text-sm text-gray-700">Conta: <strong>123456-7</strong></p>
+                                           <p className="text-sm text-gray-700">Pix: <strong>pix@esteticapro.com</strong></p>
+                                       </div>
+                                       <div>
+                                           <label className="block text-xs font-bold text-gray-500 mb-2 uppercase">Anexar Comprovante</label>
+                                           <input 
+                                              type="file" 
+                                              accept="image/*,.pdf"
+                                              className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                                              onChange={e => setProofFile(e.target.files ? e.target.files[0] : null)}
+                                           />
+                                       </div>
+                                   </div>
                                )}
 
                                {(!pixData || (paymentMethod !== 'pix' && paymentMethod !== 'boleto')) && (
@@ -481,7 +599,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                                       disabled={isProcessing}
                                       className={`w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-lg font-bold mt-6 shadow-lg shadow-green-200 transition-all flex items-center justify-center gap-2 ${isProcessing ? 'opacity-70 cursor-not-allowed' : ''}`}
                                    >
-                                       {isProcessing ? 'Processando...' : (paymentMethod === 'pix' ? 'Gerar QR Code Pix' : (paymentMethod === 'boleto' ? 'Gerar Boleto' : `Pagar ${formatCurrency(activeCheckoutLink.amount)}`))}
+                                       {isProcessing ? 'Processando...' : (paymentMethod === 'pix' ? 'Gerar QR Code Pix' : (paymentMethod === 'boleto' ? 'Gerar Boleto' : (paymentMethod === 'manual' ? 'Enviar Comprovante' : `Pagar ${formatCurrency(activeCheckoutLink.amount)}`)))}
                                    </button>
                                )}
                                
