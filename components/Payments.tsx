@@ -565,7 +565,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                                           value={cardData.holder} onChange={e => setCardData({...cardData, holder: e.target.value})}
                                        />
                                    </div>
-                               ) : (
+                               ) : paymentMethod === 'boleto' ? (
                                    <div className="text-center py-8 space-y-4 animate-in fade-in">
                                        <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
                                             <Copy size={32} />
