@@ -135,6 +135,102 @@ async function triggerAutomation(trigger, student) {
     }
 }
 
+// --- HELPER: PROCESSAR APROVAÇÃO DE PAGAMENTO ---
+async function processPaymentApproval(payment) {
+    console.log(`⚙️ Processando aprovação do pagamento: ${payment.id}`);
+    
+    const customer = typeof payment.customerData === 'string' ? JSON.parse(payment.customerData) : payment.customerData;
+    const phone = customer.phone.replace(/\D/g, '');
+    const courseId = payment.courseId || customer.courseId;
+
+    // 1. Buscar ou criar aluno
+    let student;
+    const studentRes = await pool.query('SELECT * FROM students WHERE REPLACE(REPLACE(REPLACE(phone, \' \', \'\'), \'-\' , \'\'), \'+55\', \'\') LIKE $1', [`%${phone.slice(-8)}`]);
+    
+    if (studentRes.rows.length > 0) {
+        student = studentRes.rows[0];
+    } else {
+        const newId = uuidv4();
+        const insertRes = await pool.query(
+            `INSERT INTO students (id, name, phone, email, type, status, history, notes)
+             VALUES ($1, $2, $3, $4, 'student', 'Ativo', '[]', 'Criado via Pagamento')
+             RETURNING *`,
+            [newId, customer.name, phone, customer.email]
+        );
+        student = insertRes.rows[0];
+    }
+
+    // 2. Atualizar histórico e matricular
+    let history = Array.isArray(student.history) ? student.history : (typeof student.history === 'string' ? JSON.parse(student.history) : []);
+    
+    if (courseId) {
+        const globalRes = await pool.query("SELECT data FROM app_settings WHERE key = 'GLOBAL_STATE'");
+        if (globalRes.rows.length > 0) {
+            const globalData = globalRes.rows[0].data;
+            const classes = globalData.classes || [];
+            // Encontrar turma aberta
+            const openClass = classes
+                .filter(c => c.courseId === courseId && c.status === 'open')
+                .sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())[0];
+            
+            if (openClass) {
+                if (!openClass.enrolledStudentIds.includes(student.id)) {
+                    openClass.enrolledStudentIds.push(student.id);
+                    globalData.classes = classes;
+                    await pool.query(
+                        "UPDATE app_settings SET data = $1 WHERE key = 'GLOBAL_STATE'",
+                        [globalData]
+                    );
+                }
+
+                // Evitar duplicidade no histórico
+                if (!history.some(h => h.classId === openClass.id)) {
+                    history.push({
+                        courseId: courseId,
+                        classId: openClass.id,
+                        date: new Date().toISOString().split('T')[0],
+                        paid: parseFloat(payment.amount),
+                        status: 'paid'
+                    });
+                }
+            } else {
+                // Sem turma aberta, apenas registra pagamento
+                history.push({
+                    courseId: courseId,
+                    date: new Date().toISOString().split('T')[0],
+                    paid: parseFloat(payment.amount),
+                    status: 'paid',
+                    notes: 'Pagamento confirmado (Sem turma aberta)'
+                });
+            }
+        }
+    } else {
+        // Pagamento avulso
+        history.push({
+            date: new Date().toISOString().split('T')[0],
+            paid: parseFloat(payment.amount),
+            status: 'paid',
+            notes: 'Pagamento avulso confirmado'
+        });
+    }
+
+    // 3. Persistir atualização do aluno
+    await pool.query(
+        'UPDATE students SET type = \'student\', status = \'Ativo\', history = $1, \"lastPurchase\" = NOW(), \"updatedAt\" = NOW() WHERE id = $2',
+        [JSON.stringify(history), student.id]
+    );
+
+    // 4. Disparar automações
+    try {
+        await triggerAutomation('payment_confirmed', student);
+        if (courseId) await triggerAutomation('enrollment_created', student);
+    } catch (autoErr) {
+        console.error('❌ Erro ao disparar automações:', autoErr);
+    }
+
+    console.log(`✅ Pagamento processado para ${student.name}`);
+}
+
 // Helper to validate UUID format
 const isValidUUID = (uuid) => {
     const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -340,7 +436,6 @@ app.post('/payments/create', async (req, res) => {
         // Tenta determinar a URL base para o webhook
         const protocol = req.headers['x-forwarded-proto'] || req.protocol;
         const host = req.headers['host'];
-        // Permite sobrescrever a URL base do webhook via variável de ambiente para produção
         const baseWebhookUrl = process.env.WEBHOOK_BASE_URL || `${protocol}://${host}`;
         const webhookUrl = `${baseWebhookUrl}/api/service/payments/webhook`;
 
@@ -429,7 +524,7 @@ app.post('/payments/create', async (req, res) => {
             const phone = customer.phone.replace(/\D/g, '');
             // Busca por telefone para atualizar CPF se necessário
             pool.query(
-                'UPDATE students SET cpf = $1 WHERE (REPLACE(REPLACE(REPLACE(phone, \' \', \'\'), \'-\', \'\'), \'+55\', \'\') LIKE $2) AND (cpf IS NULL OR cpf = \'\')',
+                'UPDATE students SET cpf = $1 WHERE (REPLACE(REPLACE(REPLACE(phone, \' \', \'\'), \'-\' , \'\'), \'+55\', \'\') LIKE $2) AND (cpf IS NULL OR cpf = \'\')',
                 [cleanCPF, `%${phone.slice(-8)}`]
             ).catch(e => console.error('Erro ao atualizar CPF do aluno:', e));
         }
@@ -479,11 +574,9 @@ app.post('/payments/webhook', async (req, res) => {
         console.log('🔔 Webhook Safe2Pay:', JSON.stringify(body, null, 2));
 
         // Safe2Pay pode enviar de formas diferentes dependendo da versão/config
-        // Documentação sugere que IdTransaction vem no corpo principal ou em Transaction.Id
         const transactionId = body.IdTransaction || (body.Transaction && (body.Transaction.IdTransaction || body.Transaction.Id));
         
         // Status 3 geralmente é "Pago" / "Success"
-        // Safe2Pay usa TransactionStatus.Code ou Status
         const statusObj = body.TransactionStatus || body.Status;
         const statusCode = typeof statusObj === 'object' ? statusObj.Code : (body.Status !== undefined ? body.Status : null);
 
@@ -499,113 +592,17 @@ app.post('/payments/webhook', async (req, res) => {
             const payRes = await pool.query('SELECT * FROM payments WHERE "safe2payId" = $1', [transactionId.toString()]);
             if (payRes.rows.length === 0) {
                 console.warn(`⚠️ Pagamento ${transactionId} não encontrado no banco local.`);
-                return res.status(200).send('Payment not found in local DB, but OK'); // Return 200 so Safe2Pay stops retrying
+                return res.status(200).send('Payment not found in local DB, but OK');
             }
 
             const payment = payRes.rows[0];
-            if (payment.status === 'paid') {
-                console.log(`ℹ️ Pagamento ${transactionId} já estava marcado como pago.`);
-                return res.status(200).send('Already processed');
-            }
+            if (payment.status === 'paid') return res.status(200).send('Already processed');
 
-            // 2. Atualizar status do pagamento
+            // 2. Atualizar status e processar aprovação
             await pool.query('UPDATE payments SET status = \'paid\', "updatedAt" = NOW() WHERE id = $1', [payment.id]);
+            await processPaymentApproval(payment);
 
-            // 3. Buscar ou criar aluno
-            const customer = typeof payment.customerData === 'string' ? JSON.parse(payment.customerData) : payment.customerData;
-            const phone = customer.phone.replace(/\D/g, '');
-            const courseId = payment.courseId || customer.courseId;
-            
-            let student;
-            // Busca robusta: limpa o telefone no banco também para comparar
-            const studentRes = await pool.query('SELECT * FROM students WHERE REPLACE(REPLACE(REPLACE(phone, \' \', \'\'), \'-\', \'\'), \'+55\', \'\') LIKE $1', [`%${phone.slice(-8)}`]);
-            
-            if (studentRes.rows.length > 0) {
-                student = studentRes.rows[0];
-                console.log(`👤 Aluno encontrado: ${student.name}`);
-            } else {
-                console.log(`👤 Criando novo aluno: ${customer.name}`);
-                const newId = uuidv4();
-                const insertRes = await pool.query(
-                    `INSERT INTO students (id, name, phone, email, type, status, history, notes)
-                     VALUES ($1, $2, $3, $4, 'student', 'Ativo', '[]', 'Criado via Safe2Pay')
-                     RETURNING *`,
-                    [newId, customer.name, phone, customer.email]
-                );
-                student = insertRes.rows[0];
-            }
-
-            // 4. Se houver curso vinculado, matricular
-            let history = Array.isArray(student.history) ? student.history : (typeof student.history === 'string' ? JSON.parse(student.history) : []);
-            
-            if (courseId) {
-                console.log(`📚 Vinculando ao curso: ${courseId}`);
-                const globalRes = await pool.query("SELECT data FROM app_settings WHERE key = 'GLOBAL_STATE'");
-                if (globalRes.rows.length > 0) {
-                    const globalData = globalRes.rows[0].data;
-                    const classes = globalData.classes || [];
-                    // Encontrar turma aberta para este curso
-                    const openClass = classes
-                        .filter(c => c.courseId === courseId && c.status === 'open')
-                        .sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())[0];
-                    
-                    if (openClass) {
-                        console.log(`🏫 Turma encontrada: ${openClass.id}`);
-                        if (!openClass.enrolledStudentIds.includes(student.id)) {
-                            openClass.enrolledStudentIds.push(student.id);
-                            globalData.classes = classes;
-                            await pool.query(
-                                "UPDATE app_settings SET data = $1 WHERE key = 'GLOBAL_STATE'",
-                                [globalData]
-                            );
-                        }
-
-                        // Evitar duplicidade no histórico do aluno
-                        const alreadyInHistory = history.some(h => h.classId === openClass.id);
-                        if (!alreadyInHistory) {
-                            history.push({
-                                courseId: courseId,
-                                classId: openClass.id,
-                                date: new Date().toISOString().split('T')[0],
-                                paid: parseFloat(payment.amount),
-                                status: 'paid'
-                            });
-                        }
-                    } else {
-                        console.warn(`⚠️ Nenhuma turma aberta encontrada para o curso ${courseId}`);
-                        history.push({
-                            courseId: courseId,
-                            date: new Date().toISOString().split('T')[0],
-                            paid: parseFloat(payment.amount),
-                            status: 'paid',
-                            notes: 'Matrícula pendente de turma (Pago via Safe2Pay)'
-                        });
-                    }
-                }
-            } else {
-                history.push({
-                    date: new Date().toISOString().split('T')[0],
-                    paid: parseFloat(payment.amount),
-                    status: 'paid',
-                    notes: 'Pagamento avulso via Safe2Pay'
-                });
-            }
-
-            // 5. Atualizar aluno
-            await pool.query(
-                'UPDATE students SET type = \'student\', status = \'Ativo\', history = $1, "lastPurchase" = NOW(), "updatedAt" = NOW() WHERE id = $2',
-                [JSON.stringify(history), student.id]
-            );
-
-            // 6. Disparar automações
-            try {
-                await triggerAutomation('payment_confirmed', student);
-                if (courseId) await triggerAutomation('enrollment_created', student);
-            } catch (autoErr) {
-                console.error('❌ Erro ao disparar automações:', autoErr);
-            }
-
-            console.log(`✅ Pagamento ${transactionId} processado com sucesso para ${student.name}`);
+            console.log(`✅ Pagamento ${transactionId} processado com sucesso via Webhook`);
         } else {
             console.log(`ℹ️ Webhook recebido com status irrelevante: ${statusCode}`);
         }
@@ -620,28 +617,25 @@ app.post('/payments/webhook', async (req, res) => {
 // --- ROTA DE PAGAMENTO MANUAL COM COMPROVANTE ---
 app.post('/payments/manual', upload.single('proof'), async (req, res) => {
     try {
-        // Dados vêm em req.body como strings devido ao FormData, precisa parsear
         const data = JSON.parse(req.body.data); 
-        const { linkId, customer } = data;
+        const { linkId, customer, isPaid } = data;
         const file = req.file;
-
-        if (!file) {
-            // Comprovante opcional
-        }
 
         // Tenta determinar a URL base
         const protocol = req.headers['x-forwarded-proto'] || req.protocol;
         const host = req.headers['host'];
-        // Ajuste para servir arquivos corretamente
         const fileUrl = file ? `${protocol}://${host}/api/service/uploads/${file.filename}` : null;
-        const status = file ? 'pending_review' : 'pending';
+        
+        // Status inicial
+        const status = isPaid ? 'paid' : (file ? 'pending_review' : 'pending');
 
         const paymentId = uuidv4();
         const link = typeof data.link === 'string' ? JSON.parse(data.link) : data.link;
 
-        await pool.query(
+        const insertRes = await pool.query(
             `INSERT INTO payments (id, "linkId", "courseId", amount, method, status, "proofUrl", "customerData")
-             VALUES ($1, $2, $3, $4, 'manual', $5, $6, $7)`,
+             VALUES ($1, $2, $3, $4, 'manual', $5, $6, $7)
+             RETURNING *`,
             [
                 paymentId, 
                 link.id, 
@@ -658,12 +652,17 @@ app.post('/payments/manual', upload.single('proof'), async (req, res) => {
             const cleanCPF = customer.cpf.replace(/\D/g, '');
             const phone = customer.phone.replace(/\D/g, '');
             pool.query(
-                'UPDATE students SET cpf = $1 WHERE (REPLACE(REPLACE(REPLACE(phone, \' \', \'\'), \'-\', \'\'), \'+55\', \'\') LIKE $2) AND (cpf IS NULL OR cpf = \'\')',
+                'UPDATE students SET cpf = $1 WHERE (REPLACE(REPLACE(REPLACE(phone, \' \', \'\'), \'-\' , \'\'), \'+55\', \'\') LIKE $2) AND (cpf IS NULL OR cpf = \'\')',
                 [cleanCPF, `%${phone.slice(-8)}`]
             ).catch(e => console.error('Erro ao atualizar CPF:', e));
         }
 
-        res.json({ success: true, message: 'Pagamento enviado para análise.' });
+        // Se já foi marcado como pago, processa aprovação imediatamente
+        if (isPaid) {
+            await processPaymentApproval(insertRes.rows[0]);
+        }
+
+        res.json({ success: true, message: isPaid ? 'Pagamento registrado e aprovado.' : 'Pagamento registrado.' });
 
     } catch (error) {
         console.error('❌ Erro no pagamento manual:', error);
@@ -697,89 +696,9 @@ app.post('/payments/:id/approve', async (req, res) => {
         const payment = payRes.rows[0];
         if (payment.status === 'paid') return res.json({ success: true, message: 'Já aprovado' });
 
-        // 2. Atualizar status
+        // 2. Atualizar status e processar
         await pool.query('UPDATE payments SET status = \'paid\', "updatedAt" = NOW() WHERE id = $1', [id]);
-
-        // 3. Processar Matrícula (Lógica duplicada do webhook, idealmente refatorar para função)
-        const customer = payment.customerData; // pg faz parse auto de jsonb
-        const phone = customer.phone.replace(/\D/g, '');
-        const courseId = payment.courseId;
-
-        // Buscar/Criar Aluno
-        let student;
-        const studentRes = await pool.query('SELECT * FROM students WHERE REPLACE(REPLACE(REPLACE(phone, \' \', \'\'), \'-\', \'\'), \'+55\', \'\') LIKE $1', [`%${phone.slice(-8)}`]);
-        
-        if (studentRes.rows.length > 0) {
-            student = studentRes.rows[0];
-        } else {
-            const newId = uuidv4();
-            const insertRes = await pool.query(
-                `INSERT INTO students (id, name, phone, email, type, status, history, notes)
-                 VALUES ($1, $2, $3, $4, 'student', 'Ativo', '[]', 'Criado via Aprovação Manual')
-                 RETURNING *`,
-                [newId, customer.name, phone, customer.email]
-            );
-            student = insertRes.rows[0];
-        }
-
-        // Matricular
-        let history = student.history || [];
-        if (courseId) {
-            const globalRes = await pool.query("SELECT data FROM app_settings WHERE key = 'GLOBAL_STATE'");
-            if (globalRes.rows.length > 0) {
-                const globalData = globalRes.rows[0].data;
-                const classes = globalData.classes || [];
-                const openClass = classes
-                    .filter(c => c.courseId === courseId && c.status === 'open')
-                    .sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())[0];
-                
-                if (openClass) {
-                    if (!openClass.enrolledStudentIds.includes(student.id)) {
-                        openClass.enrolledStudentIds.push(student.id);
-                        globalData.classes = classes;
-                        await pool.query(
-                            "UPDATE app_settings SET data = $1 WHERE key = 'GLOBAL_STATE'",
-                            [globalData]
-                        );
-                    }
-                    if (!history.some(h => h.classId === openClass.id)) {
-                        history.push({
-                            courseId: courseId,
-                            classId: openClass.id,
-                            date: new Date().toISOString().split('T')[0],
-                            paid: parseFloat(payment.amount),
-                            status: 'paid'
-                        });
-                    }
-                } else {
-                    history.push({
-                        courseId: courseId,
-                        date: new Date().toISOString().split('T')[0],
-                        paid: parseFloat(payment.amount),
-                        status: 'paid',
-                        notes: 'Aprovado manualmente (Sem turma aberta)'
-                    });
-                }
-            }
-        } else {
-            history.push({
-                date: new Date().toISOString().split('T')[0],
-                paid: parseFloat(payment.amount),
-                status: 'paid',
-                notes: 'Pagamento Avulso Aprovado Manualmente'
-            });
-        }
-
-        await pool.query(
-            'UPDATE students SET type = \'student\', status = \'Ativo\', history = $1, "lastPurchase" = NOW(), "updatedAt" = NOW() WHERE id = $2',
-            [JSON.stringify(history), student.id]
-        );
-
-        // Automações
-        try {
-            await triggerAutomation('payment_confirmed', student);
-            if (courseId) await triggerAutomation('enrollment_created', student);
-        } catch (e) { console.error(e); }
+        await processPaymentApproval(payment);
 
         res.json({ success: true });
 

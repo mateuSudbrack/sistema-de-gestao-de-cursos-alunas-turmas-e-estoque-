@@ -31,6 +31,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
   const [pixData, setPixData] = useState<{ qrCode: string, key: string } | null>(null);
   const [boletoData, setBoletoData] = useState<{ url: string, barcode: string } | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
+  const [isPaidManual, setIsPaidManual] = useState(false);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
 
   // Carregar pagamentos pendentes ao iniciar
@@ -87,6 +88,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
       setPixData(null);
       setBoletoData(null);
       setProofFile(null);
+      setIsPaidManual(false);
       
       // Pre-fill if linked student
       if (link.studentId) {
@@ -151,6 +153,10 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
      // Validation Logic
      if (paymentMethod === 'manual') {
          if (!customerData.name) return onShowToast("Nome é obrigatório para pagamento manual.", 'error');
+         if (!isPaidManual && !proofFile) {
+             // Se não pagou ainda, comprovante é opcional, mas se quiser enviar, deve selecionar.
+             // Aqui deixamos passar sem arquivo (status pendente), conforme pedido anterior.
+         }
      } else {
          // Strict validation for Safe2Pay
          if(!customerData.name || !customerData.phone || !customerData.email || !customerData.cpf) {
@@ -178,7 +184,8 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                      cardExpiry: cardData.expiry,
                      cardCVC: cardData.cvc,
                      cardHolder: cardData.holder
-                 }
+                 },
+                 isPaid: isPaidManual // Send flag to backend
              }));
              if (proofFile) formData.append('proof', proofFile);
 
@@ -215,12 +222,20 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                  setCheckoutStep('success');
              } else {
                  setCheckoutStep('success');
+                 // Refresh pending list if manual payment created
+                 if (paymentMethod === 'manual') {
+                     fetch(`${(import.meta as any).env?.VITE_API_URL || 'https://certificados.digiyou.com.br/api/service'}/payments/pending`)
+                        .then(res => res.json())
+                        .then(data => setPendingPayments(Array.isArray(data) ? data : []))
+                        .catch(console.error);
+                 }
                  setTimeout(() => {
                     setActiveCheckoutLink(null);
                     setCheckoutStep('method');
                     setCustomerData({ name: '', phone: '', email: '', cpf: '' });
                     setCardData({ number: '', expiry: '', cvc: '', holder: '' });
                     setProofFile(null);
+                    setIsPaidManual(false);
                  }, 4000);
              }
          } else {
@@ -355,7 +370,69 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                       rows={3}
                       value={newLink.description} onChange={e => setNewLink({...newLink, description: e.target.value})}
                    />
-                   {/* ... (Course/Student Selectors as before) ... */}
+                   <div className="space-y-2">
+                       <select 
+                          className="w-full p-3 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text"
+                          value={newLink.courseId || ''}
+                          onChange={e => {
+                              const courseId = e.target.value;
+                              const course = courses.find(c => c.id === courseId);
+                              setNewLink({
+                                  ...newLink, 
+                                  courseId: courseId || undefined,
+                                  title: course ? course.name : newLink.title,
+                                  amount: course ? course.price : newLink.amount
+                              });
+                          }}
+                       >
+                           <option value="">Vincular a um curso (Opcional)</option>
+                           {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                       </select>
+                       
+                       <div className="relative">
+                           <input 
+                                type="text"
+                                placeholder="Pesquisar Aluna..."
+                                className="w-full p-3 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text"
+                                value={studentSearch}
+                                onChange={e => {
+                                    setStudentSearch(e.target.value);
+                                    if (!e.target.value) setNewLink({...newLink, studentId: undefined});
+                                }}
+                           />
+                           {studentSearch && !newLink.studentId && (
+                               <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                                   {students
+                                     .filter(s => s.name.toLowerCase().includes(studentSearch.toLowerCase()) || s.phone.includes(studentSearch))
+                                     .map(s => (
+                                       <button 
+                                         key={s.id}
+                                         className="w-full text-left p-3 hover:bg-gray-100 dark:hover:bg-white/5 text-sm dark:text-dark-text border-b last:border-0 border-gray-100 dark:border-dark-border"
+                                         onClick={() => {
+                                             setNewLink({...newLink, studentId: s.id});
+                                             setStudentSearch(s.name);
+                                         }}
+                                       >
+                                           <div className="font-bold">{s.name}</div>
+                                           <div className="text-xs text-gray-500">{s.phone}</div>
+                                       </button>
+                                   ))}
+                               </div>
+                           )}
+                           {newLink.studentId && (
+                               <button 
+                                 onClick={() => {
+                                     setNewLink({...newLink, studentId: undefined});
+                                     setStudentSearch('');
+                                 }}
+                                 className="absolute right-3 top-3.5 text-xs text-red-500 hover:text-red-700"
+                               >
+                                   Limpar
+                               </button>
+                           )}
+                       </div>
+                   </div>
+                   <p className="text-xs text-gray-400">Ao pagar, o aluno será matriculado automaticamente no curso selecionado.</p>
                    
                    <div className="flex justify-end gap-2 pt-4">
                        <button onClick={() => {
@@ -479,21 +556,33 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                                {paymentMethod === 'manual' && (
                                    <div className="space-y-4 pt-4 border-t border-gray-100">
                                        <div className="bg-purple-50 border border-purple-100 p-4 rounded-lg">
-                                           <p className="text-xs text-purple-800 font-medium mb-2">Dados para Transferência:</p>
-                                           <p className="text-sm text-gray-700">Banco: <strong>Nubank</strong></p>
-                                           <p className="text-sm text-gray-700">Agência: <strong>0001</strong></p>
-                                           <p className="text-sm text-gray-700">Conta: <strong>123456-7</strong></p>
-                                           <p className="text-sm text-gray-700">Pix: <strong>pix@esteticapro.com</strong></p>
+                                           <p className="text-sm text-gray-700 font-medium">Realize o pagamento e envie o comprovante ou registre como pendente.</p>
                                        </div>
-                                       <div>
-                                           <label className="block text-xs font-bold text-gray-500 mb-2 uppercase">Comprovante (Opcional se pagar depois)</label>
+                                       
+                                       <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
                                            <input 
-                                              type="file" 
-                                              accept="image/*,.pdf"
-                                              className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
-                                              onChange={e => setProofFile(e.target.files ? e.target.files[0] : null)}
+                                              type="checkbox" 
+                                              id="paidManual"
+                                              className="w-5 h-5 text-primary-600 rounded"
+                                              checked={isPaidManual}
+                                              onChange={e => setIsPaidManual(e.target.checked)}
                                            />
+                                           <label htmlFor="paidManual" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                                               Pagamento já realizado / Recebido em mãos
+                                           </label>
                                        </div>
+
+                                       {!isPaidManual && (
+                                           <div className="animate-in fade-in">
+                                               <label className="block text-xs font-bold text-gray-500 mb-2 uppercase">Anexar Comprovante (Opcional)</label>
+                                               <input 
+                                                  type="file" 
+                                                  accept="image/*,.pdf"
+                                                  className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                                                  onChange={e => setProofFile(e.target.files ? e.target.files[0] : null)}
+                                               />
+                                           </div>
+                                       )}
                                    </div>
                                )}
 
@@ -503,7 +592,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                                   className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 rounded-lg font-bold mt-4 shadow-lg shadow-green-200 transition-all flex items-center justify-center gap-2"
                                >
                                    {isProcessing ? 'Processando...' : 
-                                     (paymentMethod === 'manual' ? (proofFile ? 'Enviar Comprovante' : 'Registrar Pendência') : 
+                                     (paymentMethod === 'manual' ? (isPaidManual ? 'Confirmar Recebimento' : (proofFile ? 'Enviar Comprovante' : 'Registrar Pendência')) : 
                                      (paymentMethod === 'pix' ? 'Gerar QR Code Pix' : 
                                      (paymentMethod === 'boleto' ? 'Gerar Boleto' : `Pagar ${formatCurrency(activeCheckoutLink.amount)}`)))
                                    }
@@ -580,10 +669,16 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                                        </div>
                                    </div>
                                ) : paymentMethod === 'manual' ? (
-                                   <>
-                                     <p className="text-gray-500 mt-2">Pagamento registrado com sucesso.</p>
-                                     <p className="text-sm text-gray-400">Aguardando aprovação administrativa.</p>
-                                   </>
+                                   isPaidManual ? (
+                                       <>
+                                         <p className="text-gray-500 mt-2">Pagamento confirmado e aluno matriculado!</p>
+                                       </>
+                                   ) : (
+                                       <>
+                                         <p className="text-gray-500 mt-2">Pagamento registrado com sucesso.</p>
+                                         <p className="text-sm text-gray-400">Aguardando aprovação administrativa.</p>
+                                       </>
+                                   )
                                ) : (
                                    <>
                                        <p className="text-gray-500 mt-2">Pagamento aprovado.</p>
