@@ -626,26 +626,28 @@ app.post('/payments/manual', upload.single('proof'), async (req, res) => {
         const file = req.file;
 
         if (!file) {
-            return res.status(400).json({ error: 'Comprovante é obrigatório.' });
+            // Comprovante opcional
         }
 
         // Tenta determinar a URL base
         const protocol = req.headers['x-forwarded-proto'] || req.protocol;
         const host = req.headers['host'];
         // Ajuste para servir arquivos corretamente
-        const fileUrl = `${protocol}://${host}/api/service/uploads/${file.filename}`;
+        const fileUrl = file ? `${protocol}://${host}/api/service/uploads/${file.filename}` : null;
+        const status = file ? 'pending_review' : 'pending';
 
         const paymentId = uuidv4();
         const link = typeof data.link === 'string' ? JSON.parse(data.link) : data.link;
 
         await pool.query(
             `INSERT INTO payments (id, "linkId", "courseId", amount, method, status, "proofUrl", "customerData")
-             VALUES ($1, $2, $3, $4, 'manual', 'pending_review', $5, $6)`,
+             VALUES ($1, $2, $3, $4, 'manual', $5, $6, $7)`,
             [
                 paymentId, 
                 link.id, 
                 link.courseId || null, 
                 link.amount, 
+                status,
                 fileUrl, 
                 JSON.stringify({ ...customer, linkId: link.id, courseId: link.courseId })
             ]
@@ -674,7 +676,7 @@ app.get('/payments/pending', async (req, res) => {
     try {
         const result = await pool.query(`
             SELECT * FROM payments 
-            WHERE status = 'pending_review' 
+            WHERE (status = 'pending_review' OR (status = 'pending' AND method = 'manual'))
             ORDER BY "createdAt" DESC
         `);
         res.json(result.rows);
