@@ -1,4 +1,4 @@
-# Estética Pro Manager - Guia de Deploy
+# Sistema Unic - Guia de Deploy
 
 ## 1. Banco de Dados (PostgreSQL)
 

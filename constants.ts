@@ -8,7 +8,7 @@ export const INITIAL_DATA: AppState = {
   forms: [
     {
       id: 'default-form',
-      title: 'Inscrição - Estética Pro',
+      title: 'Inscrição - Sistema Unic',
       subtitle: 'Preencha seus dados para iniciar sua jornada na beleza.',
       primaryColor: '#f43f5e',
       backgroundColor: '#ffffff',
@@ -23,7 +23,7 @@ export const INITIAL_DATA: AppState = {
   },
   automations: {
     rules: [
-      { id: '1', name: 'Boas-vindas (Novo Lead)', trigger: 'lead_created', active: true, message: 'Olá {nome}! Bem-vinda à Estética Pro. Como podemos ajudar?' },
+      { id: '1', name: 'Boas-vindas (Novo Lead)', trigger: 'lead_created', active: true, message: 'Olá {nome}! Bem-vinda à Sistema Unic. Como podemos ajudar?' },
       { id: '2', name: 'Confirmação de Matrícula', trigger: 'enrollment_created', active: true, message: 'Parabéns {nome}! Sua matrícula no curso foi confirmada. Nos vemos na aula!' }
     ],
     inactiveFollowUp: false,

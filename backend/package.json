@@ -1,7 +1,7 @@
 {
   "name": "estetica-pro-backend",
   "version": "1.0.0",
-  "description": "API e Webhook Service para Estética Pro",
+  "description": "API e Webhook Service para Sistema Unic",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

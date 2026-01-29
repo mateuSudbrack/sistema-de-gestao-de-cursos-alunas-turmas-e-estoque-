@@ -442,7 +442,7 @@ app.post('/payments/create', async (req, res) => {
         const payload = {
             IsSandbox: false,
             Application: 'Sistema de Gestão de Cursos',
-            Vendor: 'Estética Pro',
+            Vendor: 'Sistema Unic',
             CallbackUrl: webhookUrl,
             Customer: {
                 Name: customer.name,

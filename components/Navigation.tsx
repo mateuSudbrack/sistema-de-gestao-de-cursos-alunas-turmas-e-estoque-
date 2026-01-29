@@ -95,7 +95,7 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, cu
             <Sparkles className="text-white w-6 h-6" />
           </div>
           <div>
-            <h1 className="font-bold text-lg text-gray-800 dark:text-dark-text tracking-tight">Estética Pro</h1>
+            <h1 className="font-bold text-lg text-gray-800 dark:text-dark-text tracking-tight">Sistema Unic</h1>
             <p className="text-xs text-primary-500 font-medium">Gestão Escolar</p>
           </div>
         </div>
