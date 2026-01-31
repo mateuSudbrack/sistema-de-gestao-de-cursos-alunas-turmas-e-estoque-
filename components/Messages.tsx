@@ -28,6 +28,7 @@ const Messages: React.FC<MessagesProps> = ({ config, automations, students, onSa
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [bulkMessage, setBulkMessage] = useState('');
   const [bulkFilter, setBulkFilter] = useState('');
+  const [delay, setDelay] = useState(5); // Delay em segundos
 
   // --- AUTOMATION STATES ---
   const [newRule, setNewRule] = useState<{name: string, trigger: AutomationTrigger, message: string}>({
@@ -116,6 +117,8 @@ const Messages: React.FC<MessagesProps> = ({ config, automations, students, onSa
       else setSelectedStudents(filteredStudents.map(s => s.id));
   };
 
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
   const handleSendBulk = async () => {
       if (!bulkMessage) return onShowToast('Escreva uma mensagem', 'error');
       if (selectedStudents.length === 0) return onShowToast('Selecione alunas', 'error');
@@ -128,12 +131,17 @@ const Messages: React.FC<MessagesProps> = ({ config, automations, students, onSa
       let successCount = 0;
       setLoading(true);
       
-      for (const studentId of selectedStudents) {
+      for (const [index, studentId] of selectedStudents.entries()) {
           const student = students.find(s => s.id === studentId);
           if (student) {
               const msg = bulkMessage.replace('{nome}', student.name);
               const sent = await evolutionService.sendMessage(config, student.phone, msg);
               if (sent) successCount++;
+              
+              // Delay entre mensagens (exceto na última)
+              if (index < selectedStudents.length - 1) {
+                  await sleep(delay * 1000);
+              }
           }
       }
       
@@ -316,9 +324,24 @@ const Messages: React.FC<MessagesProps> = ({ config, automations, students, onSa
                             placeholder="Digite sua mensagem aqui... Use {nome} para personalizar."
                             className="flex-1 w-full p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 text-gray-800 dark:text-dark-text resize-none focus:ring-2 focus:ring-primary-100 mb-4"
                          />
-                         <div className="flex justify-between items-center bg-blue-50 dark:bg-blue-900/10 p-3 rounded-lg mb-4">
-                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Dica: Use <strong>{'{nome}'}</strong> para substituir pelo nome automaticamente.</p>
+                         
+                         <div className="flex gap-4 mb-4">
+                             <div className="flex-1 flex justify-between items-center bg-blue-50 dark:bg-blue-900/10 p-3 rounded-lg">
+                                <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Dica: Use <strong>{'{nome}'}</strong> para substituir pelo nome automaticamente.</p>
+                             </div>
+                             <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-slate-700">
+                                 <label className="text-xs font-bold text-gray-500 dark:text-dark-textMuted whitespace-nowrap">Delay (segundos):</label>
+                                 <input 
+                                    type="number" 
+                                    min="1" 
+                                    max="60" 
+                                    value={delay} 
+                                    onChange={e => setDelay(Number(e.target.value))}
+                                    className="w-16 p-1 text-center rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm font-bold"
+                                 />
+                             </div>
                          </div>
+
                          <button 
                             onClick={handleSendBulk}
                             disabled={loading || selectedStudents.length === 0}
