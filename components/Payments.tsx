@@ -43,9 +43,9 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, sales, pr
           };
       });
 
-      const productSales = sales.map(s => {
+      const productSales = (sales || []).map(s => {
           const student = students.find(st => st.id === s.studentId);
-          const itemsDesc = s.items.map((i: any) => {
+          const itemsDesc = (s.items || []).map((i: any) => {
               const p = products.find(prod => prod.id === i.productId);
               return `${i.qty}x ${p?.name || 'Produto'}`;
           }).join(', ');
