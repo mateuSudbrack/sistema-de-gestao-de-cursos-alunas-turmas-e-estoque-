@@ -16,12 +16,12 @@ interface SettingsProps {
 
 const Settings: React.FC<SettingsProps> = ({ config, currentTheme, logoUrl, onSaveConfig, onUpdateTheme, onUpdateLogo, onShowToast }) => {
   const [localConfig, setLocalConfig] = useState<EvolutionConfig>(config);
-  const [isConnecting, setIsProcessing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
 
   const handleSaveConfig = () => {
     onSaveConfig(localConfig);
-    onShowToast('Configurações de API salvas!', 'success');
+    onShowToast('Instância salva!', 'success');
   };
 
   const handleCreateInstance = async () => {

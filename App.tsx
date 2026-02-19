@@ -124,7 +124,7 @@ const App: React.FC = () => {
              paymentLinks: globalData.paymentLinks || prev.paymentLinks,
              evolutionConfig: globalData.evolutionConfig || prev.evolutionConfig,
              forms: loadedForms,
-             logoUrl: globalData.logoUrl || '',
+             logoUrl: globalData.logoUrl || prev.logoUrl,
              theme: globalData.theme || prev.theme
           }));
           setIsLoaded(true);
@@ -145,24 +145,18 @@ const App: React.FC = () => {
 
   // --- 2. SALVAR CAMPO INDIVIDUAL NO SERVIDOR ---
   const saveField = async (key: string, value: any) => {
-    if (!isLoaded) return;
+    // Note: We skip isLoaded check for theme/logo to allow immediate feedback
+    // but we use a more direct approach
     setIsSaving(true);
-    console.log(`📡 Solicitando salvamento de ${key}...`, value);
+    console.log(`📡 Persistindo ${key}...`);
     try {
-       const url = `${API_BASE_URL}/sync/partial`;
-       const res = await fetch(url, {
+       await fetch(`${API_BASE_URL}/sync/partial`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key, value })
        });
-       if (res.ok) {
-           console.log(`✅ Campo ${key} salvo com sucesso no servidor.`);
-       } else {
-           const err = await res.json();
-           console.error(`❌ Erro do servidor ao salvar ${key}:`, err);
-       }
     } catch (e) {
-       console.error(`❌ Falha de rede ao salvar campo ${key}`, e);
+       console.warn(`Erro ao salvar campo ${key}`, e);
     } finally {
        setTimeout(() => setIsSaving(false), 300);
     }
