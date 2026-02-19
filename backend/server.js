@@ -274,6 +274,31 @@ app.post('/sync/global', async (req, res) => {
     }
 });
 
+// --- ATUALIZAÇÃO PARCIAL DE DADOS GLOBAIS ---
+app.post('/sync/partial', async (req, res) => {
+    const { key, value } = req.body;
+    if (!key) return res.status(400).json({ error: 'Chave não informada' });
+    
+    try {
+        // Usa o operador || do Postgres para fazer o merge atômico do JSONB
+        const updateObj = {};
+        updateObj[key] = value;
+
+        await pool.query(
+            `INSERT INTO app_settings (key, data, "updatedAt") 
+             VALUES ('GLOBAL_STATE', $1, NOW())
+             ON CONFLICT (key) DO UPDATE SET 
+                data = app_settings.data || $1, 
+                "updatedAt" = NOW()`,
+            [updateObj]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Erro ao atualizar campo global' });
+    }
+});
+
 // --- CRUD ALUNOS (Individual) ---
 app.post('/students', async (req, res) => {
     const client = await pool.connect();

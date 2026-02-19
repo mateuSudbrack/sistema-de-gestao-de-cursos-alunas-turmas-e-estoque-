@@ -138,45 +138,21 @@ const App: React.FC = () => {
     fetchData();
   }, []);
 
-  // --- 2. SALVAR ESTADO GLOBAL NO SERVIDOR ---
-  const saveTimeoutRef = useRef<number | null>(null);
-
-  const saveGlobalState = async (state: any) => {
+  // --- 2. SALVAR CAMPO INDIVIDUAL NO SERVIDOR ---
+  const saveField = async (key: string, value: any) => {
     setIsSaving(true);
     try {
-       await fetch(`${API_BASE_URL}/sync/global`, {
+       await fetch(`${API_BASE_URL}/sync/partial`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(state)
+          body: JSON.stringify({ key, value })
        });
     } catch (e) {
-       console.warn("Erro ao salvar estado global", e);
+       console.warn(`Erro ao salvar campo ${key}`, e);
     } finally {
-       setTimeout(() => setIsSaving(false), 500);
+       setTimeout(() => setIsSaving(false), 300);
     }
   };
-
-  useEffect(() => {
-    if (loading) return; 
-
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-
-    saveTimeoutRef.current = setTimeout(() => {
-       const globalState = {
-          courses: data.courses,
-          classes: data.classes,
-          products: data.products,
-          sales: data.sales,
-          pipelines: data.pipelines,
-          automations: data.automations,
-          paymentLinks: data.paymentLinks,
-          evolutionConfig: data.evolutionConfig,
-          forms: data.forms
-       };
-       saveGlobalState(globalState);
-    }, 800) as unknown as number;
-
-  }, [data.courses, data.classes, data.products, data.sales, data.pipelines, data.automations, data.paymentLinks, data.evolutionConfig, data.forms, loading]);
 
 
   // --- 3. FUNÇÕES DE SYNC INDIVIDUAL (ALUNOS) ---
@@ -370,94 +346,126 @@ const App: React.FC = () => {
   };
 
   const handleUpdateStock = (id: string, qty: number) => {
-    setData(prev => ({
-      ...prev,
-      products: prev.products.map(p => p.id === id ? { ...p, quantity: qty } : p)
-    }));
+    setData(prev => {
+        const nextProducts = prev.products.map(p => p.id === id ? { ...p, quantity: qty } : p);
+        saveField('products', nextProducts);
+        return { ...prev, products: nextProducts };
+    });
   };
 
   const handleRecordSale = (studentId: string, items: {productId: string, qty: number}[], discount: number) => {
-    const saleSubtotal = items.reduce((acc, item) => {
-      const prod = data.products.find(p => p.id === item.productId);
-      return acc + (prod ? prod.sellPrice * item.qty : 0);
-    }, 0);
+    setData(prev => {
+        const saleSubtotal = items.reduce((acc, item) => {
+          const prod = prev.products.find(p => p.id === item.productId);
+          return acc + (prod ? prod.sellPrice * item.qty : 0);
+        }, 0);
 
-    const finalTotal = Math.max(0, saleSubtotal - discount);
+        const finalTotal = Math.max(0, saleSubtotal - discount);
 
-    const newSale = {
-      id: v4(),
-      studentId,
-      date: new Date().toISOString().split('T')[0],
-      items: items.map(i => ({ ...i, priceAtSale: data.products.find(p => p.id === i.productId)?.sellPrice || 0 })),
-      discount,
-      total: finalTotal
-    };
+        const newSale = {
+          id: v4(),
+          studentId,
+          date: new Date().toISOString().split('T')[0],
+          items: items.map(i => ({ ...i, priceAtSale: prev.products.find(p => p.id === i.productId)?.sellPrice || 0 })),
+          discount,
+          total: finalTotal
+        };
 
-    const updatedProducts = data.products.map(p => {
-      const soldItem = items.find(i => i.productId === p.id);
-      if (soldItem) return { ...p, quantity: p.quantity - soldItem.qty };
-      return p;
+        const updatedProducts = prev.products.map(p => {
+          const soldItem = items.find(i => i.productId === p.id);
+          if (soldItem) return { ...p, quantity: p.quantity - soldItem.qty };
+          return p;
+        });
+        
+        let studentToUpdate: Student | undefined;
+        const updatedStudents = prev.students.map(s => {
+            if (s.id === studentId) {
+                studentToUpdate = { ...s, lastPurchase: newSale.date };
+                return studentToUpdate;
+            }
+            return s;
+        });
+
+        const nextSales = [newSale, ...prev.sales];
+        saveField('sales', nextSales);
+        saveField('products', updatedProducts);
+        if(studentToUpdate) syncStudent(studentToUpdate);
+
+        return {
+          ...prev,
+          sales: nextSales,
+          products: updatedProducts,
+          students: updatedStudents
+        };
     });
-    
-    let studentToUpdate: Student | undefined;
-    const updatedStudents = data.students.map(s => {
-        if (s.id === studentId) {
-            studentToUpdate = { ...s, lastPurchase: newSale.date };
-            return studentToUpdate;
-        }
-        return s;
-    });
-
-    setData(prev => ({
-      ...prev,
-      sales: [newSale, ...prev.sales],
-      products: updatedProducts,
-      students: updatedStudents
-    }));
-
-    if(studentToUpdate) handleUpdateStudent(studentToUpdate);
   };
 
   const handleAddClass = (newClass: CourseClass) => {
-    setData(prev => ({ ...prev, classes: [...prev.classes, newClass] }));
+    setData(prev => {
+        const nextClasses = [...prev.classes, newClass];
+        saveField('classes', nextClasses);
+        return { ...prev, classes: nextClasses };
+    });
   };
 
   const handleAddCourse = (course: Course) => {
-    setData(prev => ({ ...prev, courses: [...prev.courses, course] }));
+    setData(prev => {
+        const nextCourses = [...prev.courses, course];
+        saveField('courses', nextCourses);
+        return { ...prev, courses: nextCourses };
+    });
   };
 
   const handleUpdateCourse = (course: Course) => {
-    setData(prev => ({
-      ...prev,
-      courses: prev.courses.map(c => c.id === course.id ? course : c)
-    }));
+    setData(prev => {
+        const nextCourses = prev.courses.map(c => c.id === course.id ? course : c);
+        saveField('courses', nextCourses);
+        return { ...prev, courses: nextCourses };
+    });
   };
 
   const handleSaveForms = (forms: PublicFormConfig[]) => {
-    setData(prev => ({ ...prev, forms }));
+    setData(prev => {
+        saveField('forms', forms);
+        return { ...prev, forms };
+    });
   };
 
   const handleSaveEvolutionConfig = (config: EvolutionConfig) => {
-      setData(prev => ({ ...prev, evolutionConfig: config }));
+      setData(prev => {
+          saveField('evolutionConfig', config);
+          return { ...prev, evolutionConfig: config };
+      });
   };
 
   const handleSaveAutomations = (config: AutomationConfig) => {
-      setData(prev => ({ ...prev, automations: config }));
+      setData(prev => {
+          saveField('automations', config);
+          return { ...prev, automations: config };
+      });
   };
 
   const handleAddPipeline = (pipeline: PipelineDefinition) => {
-      setData(prev => ({ ...prev, pipelines: [...prev.pipelines, pipeline] }));
+      setData(prev => {
+          const nextPipelines = [...prev.pipelines, pipeline];
+          saveField('pipelines', nextPipelines);
+          return { ...prev, pipelines: nextPipelines };
+      });
   };
 
   const handleUpdatePipeline = (pipeline: PipelineDefinition) => {
-      setData(prev => ({ 
-          ...prev, 
-          pipelines: prev.pipelines.map(p => p.id === pipeline.id ? pipeline : p) 
-      }));
+      setData(prev => {
+          const nextPipelines = prev.pipelines.map(p => p.id === pipeline.id ? pipeline : p);
+          saveField('pipelines', nextPipelines);
+          return { ...prev, pipelines: nextPipelines };
+      });
   };
 
   const handleSetDefaultPipeline = (id: string) => {
-      setData(prev => ({ ...prev, defaultPipelineId: id }));
+      setData(prev => {
+          saveField('defaultPipelineId', id);
+          return { ...prev, defaultPipelineId: id };
+      });
   };
 
   const handlePublicFormSubmit = (name: string, phone: string, courseId: string) => {
@@ -514,6 +522,7 @@ const App: React.FC = () => {
         return s;
       });
 
+      saveField('classes', updatedClasses);
       if(updatedStudentRef) {
           syncStudent(updatedStudentRef);
           triggerAutomation('enrollment_created', updatedStudentRef);
@@ -525,40 +534,34 @@ const App: React.FC = () => {
   };
 
   const handleUnenrollStudent = (studentId: string, classId: string) => {
-      setData(prev => ({
-          ...prev,
-          classes: prev.classes.map(c => {
+      setData(prev => {
+          const nextClasses = prev.classes.map(c => {
               if (c.id === classId) {
                   return { ...c, enrolledStudentIds: c.enrolledStudentIds.filter(id => id !== studentId) };
               }
               return c;
-          })
-      }));
+          });
+          saveField('classes', nextClasses);
+          return { ...prev, classes: nextClasses };
+      });
       addToast('Aluna removida da turma.', 'info');
   };
 
   // --- Payment Links Logic ---
   const handleAddLink = (link: PaymentLink) => {
-      setData(prev => ({ ...prev, paymentLinks: [...prev.paymentLinks, link] }));
+      setData(prev => {
+          const nextLinks = [...prev.paymentLinks, link];
+          saveField('paymentLinks', nextLinks);
+          return { ...prev, paymentLinks: nextLinks };
+      });
   };
 
   const handleDeleteLink = (id: string) => {
-      setData(prev => ({ ...prev, paymentLinks: prev.paymentLinks.filter(l => l.id !== id) }));
-      // Forçar salvamento imediato para deletar
-      setTimeout(() => {
-          const globalState = {
-              courses: data.courses,
-              classes: data.classes,
-              products: data.products,
-              sales: data.sales,
-              pipelines: data.pipelines,
-              automations: data.automations,
-              paymentLinks: data.paymentLinks.filter(l => l.id !== id),
-              evolutionConfig: data.evolutionConfig,
-              forms: data.forms
-          };
-          saveGlobalState(globalState);
-      }, 100);
+      setData(prev => {
+          const nextLinks = prev.paymentLinks.filter(l => l.id !== id);
+          saveField('paymentLinks', nextLinks);
+          return { ...prev, paymentLinks: nextLinks };
+      });
   };
 
   const handleGeneratePaymentLink = (courseId: string) => {
@@ -577,12 +580,15 @@ const App: React.FC = () => {
               clicks: 0
           };
           
+          const nextLinks = [...prev.paymentLinks, link];
+          saveField('paymentLinks', nextLinks);
+
           setTimeout(() => {
               setCurrentView('payments');
               addToast('Link gerado e copiado!', 'success');
           }, 0);
 
-          return { ...prev, paymentLinks: [...prev.paymentLinks, link] };
+          return { ...prev, paymentLinks: nextLinks };
       });
   };
 
@@ -662,6 +668,7 @@ const App: React.FC = () => {
                   }
                   return c;
               });
+              saveField('classes', updatedClasses);
           }
 
           if (updatedStudentRef) {
