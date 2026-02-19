@@ -967,6 +967,8 @@ const App: React.FC = () => {
                 links={data.paymentLinks}
                 courses={data.courses}
                 students={data.students}
+                sales={data.sales}
+                products={data.products}
                 onAddLink={handleAddLink}
                 onDeleteLink={handleDeleteLink}
                 onSimulatePayment={handleSimulatePayment}

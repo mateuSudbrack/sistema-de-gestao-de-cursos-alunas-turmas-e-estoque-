@@ -8,6 +8,8 @@ interface PaymentsProps {
   links: PaymentLink[];
   courses: Course[];
   students: Student[];
+  sales: any[];
+  products: any[];
   onAddLink: (link: PaymentLink) => void;
   onDeleteLink: (id: string) => void;
   onSimulatePayment: (linkId: string, customerName: string, customerPhone: string) => void;
@@ -17,25 +19,52 @@ interface PaymentsProps {
   onRefreshData?: () => void;
 }
 
-const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink, onDeleteLink, onSimulatePayment, onShowToast, preSelectedStudentId, onClearPreSelection, onRefreshData }) => {
+const Payments: React.FC<PaymentsProps> = ({ links, courses, students, sales, products, onAddLink, onDeleteLink, onSimulatePayment, onShowToast, preSelectedStudentId, onClearPreSelection, onRefreshData }) => {
   const [activeTab, setActiveTab] = useState<'links' | 'history'>('links');
-  const [showCreator, setShowCreator] = useState(false);
-  const [newLink, setNewLink] = useState<Partial<PaymentLink>>({ methods: ['pix', 'credit'], active: true });
-  const [studentSearch, setStudentSearch] = useState('');
-  
-  // Checkout State
-  const [activeCheckoutLink, setActiveCheckoutLink] = useState<PaymentLink | null>(null);
-  const [checkoutStep, setCheckoutStep] = useState<'method' | 'details' | 'payment' | 'success'>('method');
-  const [customerData, setCustomerData] = useState({ name: '', phone: '', email: '', cpf: '' });
-  const [cardData, setCardData] = useState({ number: '', expiry: '', cvc: '', holder: '' });
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit' | 'boleto' | 'manual'>('pix');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [pixData, setPixData] = useState<{ qrCode: string, key: string } | null>(null);
-  const [boletoData, setBoletoData] = useState<{ url: string, barcode: string } | null>(null);
-  const [proofFile, setProofFile] = useState<File | null>(null);
+  // ... rest of state ...
   const [isPaidManual, setIsPaidManual] = useState(false);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [allPayments, setAllPayments] = useState<any[]>([]);
+
+  // Memoized unified transactions
+  const unifiedTransactions = React.useMemo(() => {
+      const coursePayments = allPayments.map(p => {
+          const customer = typeof p.customerData === 'string' ? JSON.parse(p.customerData) : p.customerData;
+          return {
+              id: p.id,
+              date: p.createdAt,
+              customerName: customer?.name || 'N/A',
+              customerPhone: customer?.phone || '',
+              description: courses.find(c => c.id === p.courseId)?.name || 'Matrícula de Curso',
+              method: p.method,
+              amount: parseFloat(p.amount),
+              status: p.status,
+              type: 'course'
+          };
+      });
+
+      const productSales = sales.map(s => {
+          const student = students.find(st => st.id === s.studentId);
+          const itemsDesc = s.items.map((i: any) => {
+              const p = products.find(prod => prod.id === i.productId);
+              return `${i.qty}x ${p?.name || 'Produto'}`;
+          }).join(', ');
+
+          return {
+              id: s.id,
+              date: s.date,
+              customerName: student?.name || 'Venda Balcão',
+              customerPhone: student?.phone || '',
+              description: itemsDesc,
+              method: 'Dinheiro/Cartão (Local)',
+              amount: s.total,
+              status: 'paid',
+              type: 'product'
+          };
+      });
+
+      return [...coursePayments, ...productSales].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [allPayments, sales, courses, students, products]);
 
   const loadPending = () => {
       fetch(`${(import.meta as any).env?.VITE_API_URL || 'https://certificados.digiyou.com.br/api/service'}/payments/pending`)
@@ -385,11 +414,11 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                 <div className="flex gap-4">
                     <div className="text-center">
                         <p className="text-[10px] text-gray-500 font-bold uppercase">Total Recebido</p>
-                        <p className="text-lg font-black text-green-600">{formatCurrency(allPayments.filter(p => p.status === 'paid').reduce((acc, p) => acc + parseFloat(p.amount), 0))}</p>
+                        <p className="text-lg font-black text-green-600">{formatCurrency(unifiedTransactions.filter(p => p.status === 'paid').reduce((acc, p) => acc + p.amount, 0))}</p>
                     </div>
                     <div className="text-center">
                         <p className="text-[10px] text-gray-500 font-bold uppercase">Pendente</p>
-                        <p className="text-lg font-black text-amber-500">{formatCurrency(allPayments.filter(p => p.status !== 'paid').reduce((acc, p) => acc + parseFloat(p.amount), 0))}</p>
+                        <p className="text-lg font-black text-amber-500">{formatCurrency(unifiedTransactions.filter(p => p.status !== 'paid').reduce((acc, p) => acc + p.amount, 0))}</p>
                     </div>
                 </div>
             </div>
@@ -400,27 +429,28 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                         <tr>
                             <th className="p-4">Data</th>
                             <th className="p-4">Cliente</th>
-                            <th className="p-4">Produto/Curso</th>
+                            <th className="p-4">Descrição (Itens/Curso)</th>
                             <th className="p-4">Método</th>
                             <th className="p-4">Valor</th>
                             <th className="p-4">Status</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                        {allPayments.map(p => {
-                            const customer = typeof p.customerData === 'string' ? JSON.parse(p.customerData) : p.customerData;
-                            return (
+                        {unifiedTransactions.map(p => (
                                 <tr key={p.id} className="text-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-                                    <td className="p-4 text-gray-500 dark:text-gray-400">{new Date(p.createdAt).toLocaleDateString('pt-BR')}</td>
+                                    <td className="p-4 text-gray-500 dark:text-gray-400">{new Date(p.date).toLocaleDateString('pt-BR')}</td>
                                     <td className="p-4">
-                                        <div className="font-bold text-gray-800 dark:text-dark-text">{customer?.name || 'N/A'}</div>
-                                        <div className="text-[10px] text-gray-400">{customer?.phone || ''}</div>
+                                        <div className="font-bold text-gray-800 dark:text-dark-text">{p.customerName}</div>
+                                        <div className="text-[10px] text-gray-400">{p.customerPhone}</div>
                                     </td>
-                                    <td className="p-4 text-gray-600 dark:text-gray-300">
-                                        {courses.find(c => c.id === p.courseId)?.name || 'Venda Avulsa'}
+                                    <td className="p-4 text-gray-600 dark:text-gray-300 max-w-xs truncate" title={p.description}>
+                                        <span className={`mr-2 px-1.5 py-0.5 rounded text-[9px] font-bold ${p.type === 'product' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+                                            {p.type === 'product' ? 'ESTOQUE' : 'CURSO'}
+                                        </span>
+                                        {p.description}
                                     </td>
                                     <td className="p-4 capitalize text-gray-500">{p.method}</td>
-                                    <td className="p-4 font-bold text-gray-800 dark:text-dark-text">{formatCurrency(parseFloat(p.amount))}</td>
+                                    <td className="p-4 font-bold text-gray-800 dark:text-dark-text">{formatCurrency(p.amount)}</td>
                                     <td className="p-4">
                                         <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${
                                             p.status === 'paid' ? 'bg-green-100 text-green-700' : 
@@ -430,9 +460,8 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                                         </span>
                                     </td>
                                 </tr>
-                            )
-                        })}
-                        {allPayments.length === 0 && (
+                        ))}
+                        {unifiedTransactions.length === 0 && (
                             <tr><td colSpan={6} className="p-10 text-center text-gray-400 italic">Nenhuma transação registrada.</td></tr>
                         )}
                     </tbody>
