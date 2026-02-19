@@ -29,6 +29,21 @@ const Inventory: React.FC<InventoryProps> = ({ products, students, onAddProduct,
       minStock: 5
   });
 
+  const [consumingProduct, setConsumingProduct] = useState<Product | null>(null);
+  const [consumeQty, setConsumeQty] = useState<string>('1');
+
+  const handleConsume = () => {
+    if (!consumingProduct) return;
+    const qty = parseInt(consumeQty);
+    if (isNaN(qty) || qty <= 0) return onShowToast('Quantidade inválida.', 'error');
+    if (qty > consumingProduct.quantity) return onShowToast('Quantidade superior ao estoque.', 'error');
+
+    onUpdateStock(consumingProduct.id, consumingProduct.quantity - qty);
+    onShowToast(`${qty} unidades de ${consumingProduct.name} consumidas.`, 'success');
+    setConsumingProduct(null);
+    setConsumeQty('1');
+  };
+
   const filteredProducts = products.filter(p => {
       const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = p.category === activeTab;
@@ -183,9 +198,13 @@ const Inventory: React.FC<InventoryProps> = ({ products, students, onAddProduct,
                           + Vender
                           </button>
                       ) : (
-                          <span className="text-gray-400 dark:text-gray-600 px-4 py-2 text-sm">
-                          Uso Interno
-                          </span>
+                          <button 
+                            onClick={() => { setConsumingProduct(product); setConsumeQty('1'); }}
+                            disabled={product.quantity <= 0}
+                            className="bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-400 px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95"
+                          >
+                            + Consumir
+                          </button>
                       )}
                       <button 
                         onClick={() => {
@@ -374,6 +393,47 @@ const Inventory: React.FC<InventoryProps> = ({ products, students, onAddProduct,
                       <button onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">Cancelar</button>
                       <button onClick={handleSaveProduct} className="px-6 py-2 bg-primary-600 text-white rounded-lg font-bold shadow-md hover:bg-primary-700 flex items-center gap-2">
                           <Save size={18}/> Salvar
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+      {/* Modal Baixa de Consumo */}
+      {consumingProduct && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white dark:bg-dark-surface rounded-2xl w-full max-w-sm shadow-2xl p-6 space-y-4 animate-in zoom-in-95">
+                  <div className="flex justify-between items-center border-b border-gray-100 dark:border-dark-border pb-4">
+                      <h3 className="text-lg font-bold text-gray-800 dark:text-dark-text flex items-center gap-2">
+                          <Minus size={20} className="text-amber-500"/> Baixa de Consumo
+                      </h3>
+                      <button onClick={() => setConsumingProduct(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><X size={20}/></button>
+                  </div>
+                  
+                  <div className="space-y-3">
+                      <div className="text-sm text-gray-600 dark:text-dark-textMuted">
+                          Item: <span className="font-bold text-gray-800 dark:text-dark-text">{consumingProduct.name}</span>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-dark-textMuted mb-1">Quantidade a Consumir</label>
+                          <input 
+                              type="number"
+                              className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-dark-text focus:ring-2 focus:ring-amber-200 outline-none"
+                              value={consumeQty}
+                              onChange={e => setConsumeQty(e.target.value)}
+                              min="1"
+                              max={consumingProduct.quantity}
+                          />
+                          <p className="text-[10px] text-gray-400 mt-1">Disponível em estoque: {consumingProduct.quantity} un</p>
+                      </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                      <button onClick={() => setConsumingProduct(null)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">Cancelar</button>
+                      <button 
+                        onClick={handleConsume}
+                        className="px-6 py-2 bg-amber-500 text-white rounded-lg font-bold shadow-md hover:bg-amber-600 flex items-center gap-2"
+                      >
+                          Confirmar Consumo
                       </button>
                   </div>
               </div>
