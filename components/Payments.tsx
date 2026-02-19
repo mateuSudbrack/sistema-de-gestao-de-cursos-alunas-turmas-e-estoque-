@@ -153,9 +153,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
      // Validation Logic
      if (paymentMethod === 'manual') {
          if (!customerData.name) return onShowToast("Nome é obrigatório.", 'error');
-         if (isPaidManual && !proofFile) {
-             return onShowToast("Anexe o comprovante para confirmar o recebimento.", 'error');
-         }
+         // Comprovante é opcional, então não barramos aqui.
      } else {
          // Strict validation for Safe2Pay
          if(!customerData.name || !customerData.phone || !customerData.email || !customerData.cpf) {
@@ -576,11 +574,10 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
 
                                        {isPaidManual && (
                                            <div className="animate-in fade-in">
-                                               <label className="block text-xs font-bold text-gray-500 mb-2 uppercase">Anexar Comprovante *</label>
+                                               <label className="block text-xs font-bold text-gray-500 mb-2 uppercase">Anexar Comprovante (Opcional)</label>
                                                <input 
                                                   type="file" 
                                                   accept="image/*,.pdf"
-                                                  required
                                                   className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
                                                   onChange={e => setProofFile(e.target.files ? e.target.files[0] : null)}
                                                />
