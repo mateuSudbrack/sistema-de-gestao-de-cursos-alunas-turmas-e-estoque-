@@ -710,6 +710,17 @@ app.get('/payments/pending', async (req, res) => {
     }
 });
 
+// --- LISTAR TODOS OS PAGAMENTOS (HISTÓRICO) ---
+app.get('/payments/all', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM payments ORDER BY "createdAt" DESC');
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Erro ao listar todos pagamentos:', error);
+        res.status(500).json({ error: 'Erro interno' });
+    }
+});
+
 // --- APROVAR PAGAMENTO MANUAL ---
 app.post('/payments/:id/approve', async (req, res) => {
     const { id } = req.params;

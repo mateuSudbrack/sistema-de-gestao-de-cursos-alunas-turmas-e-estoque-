@@ -160,6 +160,7 @@ export interface AppState {
   automations: AutomationConfig;
   paymentLinks: PaymentLink[];
   theme: Theme;
+  logoUrl?: string;
 }
 
-export type View = 'dashboard' | 'students' | 'pipeline' | 'courses' | 'inventory' | 'agenda' | 'form-builder' | 'public-form' | 'messages' | 'payments';
+export type View = 'dashboard' | 'students' | 'pipeline' | 'courses' | 'inventory' | 'agenda' | 'form-builder' | 'public-form' | 'messages' | 'payments' | 'settings';

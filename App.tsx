@@ -11,6 +11,7 @@ import Agenda from './components/Agenda';
 import FormBuilder from './components/FormBuilder';
 import Messages from './components/Messages';
 import Payments from './components/Payments';
+import Settings from './components/Settings';
 import ToastContainer, { ToastMessage, ToastType } from './components/Toast';
 import { evolutionService } from './services/evolutionService';
 import { v4 } from 'uuid';
@@ -121,7 +122,8 @@ const App: React.FC = () => {
              automations: globalData.automations || prev.automations,
              paymentLinks: globalData.paymentLinks || prev.paymentLinks,
              evolutionConfig: globalData.evolutionConfig || prev.evolutionConfig,
-             forms: loadedForms
+             forms: loadedForms,
+             logoUrl: globalData.logoUrl || ''
           }));
           console.log("✅ Dados sincronizados com sucesso!");
         } else {
@@ -442,6 +444,20 @@ const App: React.FC = () => {
       setData(prev => {
           saveField('automations', config);
           return { ...prev, automations: config };
+      });
+  };
+
+  const handleUpdateLogo = (url: string) => {
+      setData(prev => {
+          saveField('logoUrl', url);
+          return { ...prev, logoUrl: url };
+      });
+  };
+
+  const handleUpdateTheme = (theme: Theme) => {
+      setData(prev => {
+          saveField('theme', theme);
+          return { ...prev, theme };
       });
   };
 
@@ -804,6 +820,7 @@ const App: React.FC = () => {
          currentView={currentView} 
          setCurrentView={setCurrentView} 
          currentTheme={data.theme}
+         logoUrl={data.logoUrl}
          toggleTheme={toggleTheme}
          onLogout={handleLogout}
       />
@@ -908,6 +925,18 @@ const App: React.FC = () => {
                   window.open(`${window.location.origin}${window.location.pathname}?view=form&id=${id}`, '_blank');
               }}
               onShowToast={addToast}
+            />
+        )}
+
+        {currentView === 'settings' && (
+            <Settings 
+                config={data.evolutionConfig}
+                currentTheme={data.theme}
+                logoUrl={data.logoUrl}
+                onSaveConfig={handleSaveEvolutionConfig}
+                onUpdateTheme={handleUpdateTheme}
+                onUpdateLogo={handleUpdateLogo}
+                onShowToast={addToast}
             />
         )}
       </main>

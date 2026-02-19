@@ -1,17 +1,18 @@
 
 import React, { useState } from 'react';
-import { LayoutDashboard, Users, GraduationCap, Package, Calendar, FileEdit, Sparkles, Moon, Sun, Kanban, MessageSquareText, ChevronDown, ChevronRight, UserCircle, CreditCard, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, GraduationCap, Package, Calendar, FileEdit, Sparkles, Moon, Sun, Kanban, MessageSquareText, ChevronDown, ChevronRight, UserCircle, CreditCard, LogOut, Settings as SettingsIcon } from 'lucide-react';
 import { View, Theme } from '../types';
 
 interface NavigationProps {
   currentView: View;
   setCurrentView: (view: View) => void;
   currentTheme: Theme;
+  logoUrl?: string;
   toggleTheme: () => void;
   onLogout: () => void;
 }
 
-const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, currentTheme, toggleTheme, onLogout }) => {
+const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, currentTheme, logoUrl, toggleTheme, onLogout }) => {
   // State to control expanded submenus
   const [expandedGroups, setExpandedGroups] = useState<string[]>(['students-group']);
 
@@ -75,6 +76,12 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, cu
       label: 'Formulário', 
       icon: FileEdit 
     },
+    { 
+      type: 'item', 
+      id: 'settings', 
+      label: 'Configurações', 
+      icon: SettingsIcon 
+    },
   ];
 
   // Helper to flatten items for mobile
@@ -91,9 +98,13 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, cu
       {/* Desktop Sidebar */}
       <div className="hidden md:flex flex-col w-64 bg-white dark:bg-dark-surface border-r border-gray-100 dark:border-dark-border h-screen fixed left-0 top-0 z-20 shadow-lg transition-colors duration-300">
         <div className="p-6 flex items-center gap-3 border-b border-gray-100 dark:border-dark-border">
-          <div className="bg-primary-500 p-2 rounded-lg shadow-md">
-            <Sparkles className="text-white w-6 h-6" />
-          </div>
+          {logoUrl ? (
+            <img src={logoUrl} alt="Logo" className="w-10 h-10 object-contain rounded-lg" />
+          ) : (
+            <div className="bg-primary-500 p-2 rounded-lg shadow-md">
+              <Sparkles className="text-white w-6 h-6" />
+            </div>
+          )}
           <div>
             <h1 className="font-bold text-lg text-gray-800 dark:text-dark-text tracking-tight">Sistema Unic</h1>
             <p className="text-xs text-primary-500 font-medium">Gestão Escolar</p>

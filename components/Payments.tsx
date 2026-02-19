@@ -17,6 +17,7 @@ interface PaymentsProps {
 }
 
 const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink, onDeleteLink, onSimulatePayment, onShowToast, preSelectedStudentId, onClearPreSelection }) => {
+  const [activeTab, setActiveTab] = useState<'links' | 'history'>('links');
   const [showCreator, setShowCreator] = useState(false);
   const [newLink, setNewLink] = useState<Partial<PaymentLink>>({ methods: ['pix', 'credit'], active: true });
   const [studentSearch, setStudentSearch] = useState('');
@@ -33,14 +34,26 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [isPaidManual, setIsPaidManual] = useState(false);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
+  const [allPayments, setAllPayments] = useState<any[]>([]);
 
-  // Carregar pagamentos pendentes ao iniciar
-  React.useEffect(() => {
+  const loadPending = () => {
       fetch(`${(import.meta as any).env?.VITE_API_URL || 'https://certificados.digiyou.com.br/api/service'}/payments/pending`)
         .then(res => res.json())
         .then(data => setPendingPayments(Array.isArray(data) ? data : []))
         .catch(console.error);
-  }, []);
+  };
+
+  const loadAll = () => {
+      fetch(`${(import.meta as any).env?.VITE_API_URL || 'https://certificados.digiyou.com.br/api/service'}/payments/all`)
+        .then(res => res.json())
+        .then(data => setAllPayments(Array.isArray(data) ? data : []))
+        .catch(console.error);
+  };
+
+  React.useEffect(() => {
+      loadPending();
+      if (activeTab === 'history') loadAll();
+  }, [activeTab]);
 
   const handleApprovePayment = async (id: string) => {
       if (!window.confirm('Confirma o recebimento deste pagamento?')) return;
@@ -49,7 +62,8 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
           const data = await res.json();
           if (data.success) {
               onShowToast('Pagamento aprovado e aluna matriculada!', 'success');
-              setPendingPayments(prev => prev.filter(p => p.id !== id));
+              loadPending();
+              if (activeTab === 'history') loadAll();
           } else {
               onShowToast(data.error || 'Erro ao aprovar', 'error');
           }
@@ -219,13 +233,10 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                  setCheckoutStep('success');
              } else {
                  setCheckoutStep('success');
-                 // Refresh pending list if manual payment created
-                 if (paymentMethod === 'manual') {
-                     fetch(`${(import.meta as any).env?.VITE_API_URL || 'https://certificados.digiyou.com.br/api/service'}/payments/pending`)
-                        .then(res => res.json())
-                        .then(data => setPendingPayments(Array.isArray(data) ? data : []))
-                        .catch(console.error);
-                 }
+                 // Refresh lists
+                 loadPending();
+                 if (activeTab === 'history') loadAll();
+
                  setTimeout(() => {
                     setActiveCheckoutLink(null);
                     setCheckoutStep('method');
@@ -250,101 +261,183 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
 
   return (
     <div className="h-full flex flex-col animate-fade-in pb-20 md:pb-0">
-       <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-800 dark:text-dark-text">Links de Pagamento</h2>
-          <button 
-             onClick={() => setShowCreator(true)}
-             className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-md transition-all"
-          >
-             <Plus size={20}/> Criar Link
-          </button>
+       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-dark-text">Gestão Financeira</h2>
+          
+          <div className="flex items-center gap-2">
+            <div className="flex bg-white dark:bg-dark-surface p-1 rounded-xl border border-gray-100 dark:border-dark-border">
+                <button 
+                  onClick={() => setActiveTab('links')}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === 'links' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400' : 'text-gray-500'}`}
+                >
+                    Links de Pagamento
+                </button>
+                <button 
+                  onClick={() => setActiveTab('history')}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === 'history' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400' : 'text-gray-500'}`}
+                >
+                    Histórico Geral
+                </button>
+            </div>
+            <button 
+                onClick={() => setShowCreator(true)}
+                className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-md transition-all whitespace-nowrap"
+            >
+                <Plus size={20}/> Criar Link
+            </button>
+          </div>
        </div>
 
-       {/* Pending Payments (Admin) */}
-       {pendingPayments.length > 0 && (
-           <div className="mb-8 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 rounded-2xl p-6">
-               <h3 className="text-lg font-bold text-amber-800 dark:text-amber-400 mb-4 flex items-center gap-2">
-                   <AlertTriangle size={20}/> Pagamentos Pendentes de Aprovação
-               </h3>
-               <div className="grid gap-4">
-                   {pendingPayments.map(p => {
-                       const customer = typeof p.customerData === 'string' ? JSON.parse(p.customerData) : p.customerData;
-                       return (
-                           <div key={p.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-amber-100 dark:border-slate-700 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm">
-                               <div>
-                                   <div className="font-bold text-gray-800 dark:text-dark-text">{customer.name}</div>
-                                   <div className="text-sm text-gray-500">{customer.email} • {customer.phone}</div>
-                                   <div className="text-xs text-amber-600 font-medium mt-1">Valor: {formatCurrency(parseFloat(p.amount))} {p.status === 'pending' ? '(Aguardando Comprovante)' : '(Em Análise)'}</div>
-                               </div>
-                               <div className="flex gap-2 w-full md:w-auto">
-                                   {p.proofUrl && (
-                                       <a 
-                                         href={p.proofUrl} 
-                                         target="_blank" 
-                                         rel="noreferrer"
-                                         className="flex-1 md:flex-none px-4 py-2 bg-blue-50 text-blue-600 rounded-lg text-sm font-bold hover:bg-blue-100 flex items-center justify-center gap-2"
-                                       >
-                                           <ExternalLink size={16}/> Ver Comprovante
-                                       </a>
-                                   )}
-                                   <button 
-                                     onClick={() => handleApprovePayment(p.id)}
-                                     className="flex-1 md:flex-none px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 shadow-sm flex items-center justify-center gap-2"
-                                   >
-                                       <CheckCircle size={16}/> Aprovar
-                                   </button>
-                               </div>
-                           </div>
-                       )
-                   })}
-               </div>
-           </div>
+       {activeTab === 'links' ? (
+         <>
+            {/* Pending Payments (Admin) */}
+            {pendingPayments.length > 0 && (
+                <div className="mb-8 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 rounded-2xl p-6">
+                    <h3 className="text-lg font-bold text-amber-800 dark:text-amber-400 mb-4 flex items-center gap-2">
+                        <AlertTriangle size={20}/> Aguardando Aprovação
+                    </h3>
+                    <div className="grid gap-4">
+                        {pendingPayments.map(p => {
+                            const customer = typeof p.customerData === 'string' ? JSON.parse(p.customerData) : p.customerData;
+                            return (
+                                <div key={p.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-amber-100 dark:border-slate-700 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm">
+                                    <div>
+                                        <div className="font-bold text-gray-800 dark:text-dark-text">{customer.name}</div>
+                                        <div className="text-sm text-gray-500">{customer.email} • {customer.phone}</div>
+                                        <div className="text-xs text-amber-600 font-medium mt-1">Valor: {formatCurrency(parseFloat(p.amount))} {p.status === 'pending' ? '(Aguardando Comprovante)' : '(Em Análise)'}</div>
+                                    </div>
+                                    <div className="flex gap-2 w-full md:w-auto">
+                                        {p.proofUrl && (
+                                            <a 
+                                                href={p.proofUrl} 
+                                                target="_blank" 
+                                                rel="noreferrer"
+                                                className="flex-1 md:flex-none px-4 py-2 bg-blue-50 text-blue-600 rounded-lg text-sm font-bold hover:bg-blue-100 flex items-center justify-center gap-2"
+                                            >
+                                                <ExternalLink size={16}/> Ver Comprovante
+                                            </a>
+                                        )}
+                                        <button 
+                                            onClick={() => handleApprovePayment(p.id)}
+                                            className="flex-1 md:flex-none px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 shadow-sm flex items-center justify-center gap-2"
+                                        >
+                                            <CheckCircle size={16}/> Aprovar
+                                        </button>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* Links Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {links.map(link => (
+                    <div key={link.id} className="bg-white dark:bg-dark-surface rounded-2xl p-5 border border-gray-100 dark:border-dark-border shadow-sm hover:shadow-md transition-all relative group">
+                        <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                            <button onClick={() => handleDeleteLinkWithConfirm(link.id, link.title)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100"><Trash2 size={16}/></button>
+                        </div>
+                        
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                                <CreditCard size={20}/>
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-gray-800 dark:text-dark-text">{link.title}</h3>
+                                <p className="text-sm text-primary-600 font-bold">{formatCurrency(link.amount)}</p>
+                            </div>
+                        </div>
+                        
+                        <p className="text-sm text-gray-500 dark:text-dark-textMuted mb-4 line-clamp-2">{link.description}</p>
+                        
+                        <div className="flex items-center gap-2 mb-4 text-xs text-gray-400">
+                            <span className="flex items-center gap-1"><Smartphone size={12}/> {link.clicks} visualizações</span>
+                        </div>
+
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => {
+                                    navigator.clipboard.writeText(`https://pay.esteticapro.com/${link.id}`);
+                                    onShowToast('Link copiado!', 'success');
+                                }}
+                                className="flex-1 py-2 rounded-lg border border-gray-200 dark:border-dark-border text-gray-600 dark:text-dark-text hover:bg-gray-50 dark:hover:bg-white/5 flex items-center justify-center gap-2 text-sm font-medium"
+                            >
+                                <Copy size={16}/> Copiar
+                            </button>
+                            <button 
+                                onClick={() => openCheckout(link)}
+                                className="flex-1 py-2 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 flex items-center justify-center gap-2 text-sm font-medium"
+                            >
+                                <ExternalLink size={16}/> Abrir
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+         </>
+       ) : (
+         <div className="bg-white dark:bg-dark-surface rounded-2xl shadow-sm border border-gray-100 dark:border-dark-border overflow-hidden">
+            <div className="p-6 border-b border-gray-100 dark:border-dark-border flex justify-between items-center bg-gray-50 dark:bg-slate-800/50">
+                <h3 className="font-bold text-gray-800 dark:text-dark-text">Relatório de Transações</h3>
+                <div className="flex gap-4">
+                    <div className="text-center">
+                        <p className="text-[10px] text-gray-500 font-bold uppercase">Total Recebido</p>
+                        <p className="text-lg font-black text-green-600">{formatCurrency(allPayments.filter(p => p.status === 'paid').reduce((acc, p) => acc + parseFloat(p.amount), 0))}</p>
+                    </div>
+                    <div className="text-center">
+                        <p className="text-[10px] text-gray-500 font-bold uppercase">Pendente</p>
+                        <p className="text-lg font-black text-amber-500">{formatCurrency(allPayments.filter(p => p.status !== 'paid').reduce((acc, p) => acc + parseFloat(p.amount), 0))}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                    <thead className="bg-gray-50 dark:bg-slate-800 text-gray-500 text-[10px] uppercase font-bold tracking-wider">
+                        <tr>
+                            <th className="p-4">Data</th>
+                            <th className="p-4">Cliente</th>
+                            <th className="p-4">Produto/Curso</th>
+                            <th className="p-4">Método</th>
+                            <th className="p-4">Valor</th>
+                            <th className="p-4">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
+                        {allPayments.map(p => {
+                            const customer = typeof p.customerData === 'string' ? JSON.parse(p.customerData) : p.customerData;
+                            return (
+                                <tr key={p.id} className="text-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                                    <td className="p-4 text-gray-500 dark:text-gray-400">{new Date(p.createdAt).toLocaleDateString('pt-BR')}</td>
+                                    <td className="p-4">
+                                        <div className="font-bold text-gray-800 dark:text-dark-text">{customer?.name || 'N/A'}</div>
+                                        <div className="text-[10px] text-gray-400">{customer?.phone || ''}</div>
+                                    </td>
+                                    <td className="p-4 text-gray-600 dark:text-gray-300">
+                                        {courses.find(c => c.id === p.courseId)?.name || 'Venda Avulsa'}
+                                    </td>
+                                    <td className="p-4 capitalize text-gray-500">{p.method}</td>
+                                    <td className="p-4 font-bold text-gray-800 dark:text-dark-text">{formatCurrency(parseFloat(p.amount))}</td>
+                                    <td className="p-4">
+                                        <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${
+                                            p.status === 'paid' ? 'bg-green-100 text-green-700' : 
+                                            p.status === 'pending_review' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                                        }`}>
+                                            {p.status === 'paid' ? 'Pago' : p.status === 'pending_review' ? 'Em Análise' : 'Pendente'}
+                                        </span>
+                                    </td>
+                                </tr>
+                            )
+                        })}
+                        {allPayments.length === 0 && (
+                            <tr><td colSpan={6} className="p-10 text-center text-gray-400 italic">Nenhuma transação registrada.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+         </div>
        )}
-
-       {/* Links Grid */}
-       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-           {links.map(link => (
-               <div key={link.id} className="bg-white dark:bg-dark-surface rounded-2xl p-5 border border-gray-100 dark:border-dark-border shadow-sm hover:shadow-md transition-all relative group">
-                   <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                       <button onClick={() => handleDeleteLinkWithConfirm(link.id, link.title)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100"><Trash2 size={16}/></button>
-                   </div>
-                   
-                   <div className="flex items-center gap-3 mb-3">
-                       <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600">
-                           <CreditCard size={20}/>
-                       </div>
-                       <div>
-                           <h3 className="font-bold text-gray-800 dark:text-dark-text">{link.title}</h3>
-                           <p className="text-sm text-primary-600 font-bold">{formatCurrency(link.amount)}</p>
-                       </div>
-                   </div>
-                   
-                   <p className="text-sm text-gray-500 dark:text-dark-textMuted mb-4 line-clamp-2">{link.description}</p>
-                   
-                   <div className="flex items-center gap-2 mb-4 text-xs text-gray-400">
-                       <span className="flex items-center gap-1"><Smartphone size={12}/> {link.clicks} visualizações</span>
-                   </div>
-
-                   <div className="flex gap-2">
-                       <button 
-                         onClick={() => {
-                             navigator.clipboard.writeText(`https://pay.esteticapro.com/${link.id}`);
-                             onShowToast('Link copiado!', 'success');
-                         }}
-                         className="flex-1 py-2 rounded-lg border border-gray-200 dark:border-dark-border text-gray-600 dark:text-dark-text hover:bg-gray-50 dark:hover:bg-white/5 flex items-center justify-center gap-2 text-sm font-medium"
-                       >
-                           <Copy size={16}/> Copiar
-                       </button>
-                       <button 
-                         onClick={() => openCheckout(link)}
-                         className="flex-1 py-2 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 flex items-center justify-center gap-2 text-sm font-medium"
-                       >
-                           <ExternalLink size={16}/> Abrir
-                       </button>
-                   </div>
-               </div>
-           ))}
-       </div>
 
        {/* Creator Modal */}
        {showCreator && (

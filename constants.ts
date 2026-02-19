@@ -64,5 +64,6 @@ export const INITIAL_DATA: AppState = {
   classes: [],
   students: [],
   products: [],
-  sales: []
+  sales: [],
+  logoUrl: ''
 };
