@@ -112,7 +112,7 @@ const App: React.FC = () => {
           // Atualizar Estado com Dados Reais
           setData(prev => ({
              ...prev,
-             students: processedStudents.length > 0 ? processedStudents : prev.students,
+             students: dbStudents.length >= 0 ? processedStudents : prev.students,
              courses: globalData.courses || prev.courses,
              classes: globalData.classes || prev.classes,
              products: globalData.products || prev.products,
