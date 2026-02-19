@@ -279,23 +279,27 @@ app.post('/sync/partial', async (req, res) => {
     const { key, value } = req.body;
     if (!key) return res.status(400).json({ error: 'Chave não informada' });
     
+    console.log(`💾 Salvando campo global: ${key}`);
+    
     try {
-        // Usa o operador || do Postgres para fazer o merge atômico do JSONB
         const updateObj = {};
         updateObj[key] = value;
 
-        await pool.query(
-            `INSERT INTO app_settings (key, data, "updatedAt") 
-             VALUES ('GLOBAL_STATE', $1, NOW())
-             ON CONFLICT (key) DO UPDATE SET 
-                data = app_settings.data || $1, 
-                "updatedAt" = NOW()`,
-            [updateObj]
-        );
-        res.json({ success: true });
+        const query = `
+            INSERT INTO app_settings (key, data, "updatedAt") 
+            VALUES ('GLOBAL_STATE', $1, NOW())
+            ON CONFLICT (key) DO UPDATE SET 
+                data = app_settings.data || EXCLUDED.data, 
+                "updatedAt" = NOW()
+            RETURNING data;
+        `;
+
+        const result = await pool.query(query, [updateObj]);
+        console.log(`✅ Campo ${key} persistido com sucesso.`);
+        res.json({ success: true, currentData: result.rows[0].data });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Erro ao atualizar campo global' });
+        console.error(`❌ Erro ao atualizar campo ${key}:`, err.message);
+        res.status(500).json({ error: 'Erro ao atualizar campo global', details: err.message });
     }
 });
 

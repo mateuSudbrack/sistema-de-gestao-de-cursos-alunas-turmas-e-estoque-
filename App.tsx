@@ -272,7 +272,7 @@ const App: React.FC = () => {
   const toggleTheme = () => {
     setData(prev => {
         const nextTheme = prev.theme === 'light' ? 'dark' : 'light';
-        saveField('theme', nextTheme);
+        setTimeout(() => saveField('theme', nextTheme), 0);
         return { ...prev, theme: nextTheme };
     });
   };
@@ -348,12 +348,19 @@ const App: React.FC = () => {
   const handleUpdateStock = (id: string, qty: number) => {
     setData(prev => {
         const nextProducts = prev.products.map(p => p.id === id ? { ...p, quantity: qty } : p);
-        saveField('products', nextProducts);
+        // Move side effect out of next tick if possible or call it after
         return { ...prev, products: nextProducts };
+    });
+    // Find product to get its info for logging if needed, or just send full list
+    setData(prev => {
+        saveField('products', prev.products);
+        return prev;
     });
   };
 
   const handleRecordSale = (studentId: string, items: {productId: string, qty: number}[], discount: number) => {
+    let studentToUpdate: Student | undefined;
+    
     setData(prev => {
         const saleSubtotal = items.reduce((acc, item) => {
           const prod = prev.products.find(p => p.id === item.productId);
@@ -377,7 +384,6 @@ const App: React.FC = () => {
           return p;
         });
         
-        let studentToUpdate: Student | undefined;
         const updatedStudents = prev.students.map(s => {
             if (s.id === studentId) {
                 studentToUpdate = { ...s, lastPurchase: newSale.date };
@@ -387,9 +393,13 @@ const App: React.FC = () => {
         });
 
         const nextSales = [newSale, ...prev.sales];
-        saveField('sales', nextSales);
-        saveField('products', updatedProducts);
-        if(studentToUpdate) syncStudent(studentToUpdate);
+        
+        // Schedule saves
+        setTimeout(() => {
+            saveField('sales', nextSales);
+            saveField('products', updatedProducts);
+            if(studentToUpdate) syncStudent(studentToUpdate);
+        }, 0);
 
         return {
           ...prev,
@@ -425,38 +435,28 @@ const App: React.FC = () => {
   };
 
   const handleSaveForms = (forms: PublicFormConfig[]) => {
-    setData(prev => {
-        saveField('forms', forms);
-        return { ...prev, forms };
-    });
+    saveField('forms', forms);
+    setData(prev => ({ ...prev, forms }));
   };
 
   const handleSaveEvolutionConfig = (config: EvolutionConfig) => {
-      setData(prev => {
-          saveField('evolutionConfig', config);
-          return { ...prev, evolutionConfig: config };
-      });
+      saveField('evolutionConfig', config);
+      setData(prev => ({ ...prev, evolutionConfig: config }));
   };
 
   const handleSaveAutomations = (config: AutomationConfig) => {
-      setData(prev => {
-          saveField('automations', config);
-          return { ...prev, automations: config };
-      });
+      saveField('automations', config);
+      setData(prev => ({ ...prev, automations: config }));
   };
 
   const handleUpdateLogo = (url: string) => {
-      setData(prev => {
-          saveField('logoUrl', url);
-          return { ...prev, logoUrl: url };
-      });
+      saveField('logoUrl', url);
+      setData(prev => ({ ...prev, logoUrl: url }));
   };
 
   const handleUpdateTheme = (theme: Theme) => {
-      setData(prev => {
-          saveField('theme', theme);
-          return { ...prev, theme };
-      });
+      saveField('theme', theme);
+      setData(prev => ({ ...prev, theme }));
   };
 
   const handleAddPipeline = (pipeline: PipelineDefinition) => {
@@ -476,10 +476,8 @@ const App: React.FC = () => {
   };
 
   const handleSetDefaultPipeline = (id: string) => {
-      setData(prev => {
-          saveField('defaultPipelineId', id);
-          return { ...prev, defaultPipelineId: id };
-      });
+      saveField('defaultPipelineId', id);
+      setData(prev => ({ ...prev, defaultPipelineId: id }));
   };
 
   const handlePublicFormSubmit = (name: string, phone: string, courseId: string) => {
