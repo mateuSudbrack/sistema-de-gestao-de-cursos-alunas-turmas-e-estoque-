@@ -35,6 +35,7 @@ const App: React.FC = () => {
 
   // Estado Inicial
   const [data, setData] = useState<AppState>(INITIAL_DATA);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -126,6 +127,7 @@ const App: React.FC = () => {
              logoUrl: globalData.logoUrl || '',
              theme: globalData.theme || prev.theme
           }));
+          setIsLoaded(true);
           console.log("✅ Dados sincronizados com sucesso!");
         } else {
           console.error("❌ Erro ao baixar dados do servidor");
@@ -143,15 +145,24 @@ const App: React.FC = () => {
 
   // --- 2. SALVAR CAMPO INDIVIDUAL NO SERVIDOR ---
   const saveField = async (key: string, value: any) => {
+    if (!isLoaded) return;
     setIsSaving(true);
+    console.log(`📡 Solicitando salvamento de ${key}...`, value);
     try {
-       await fetch(`${API_BASE_URL}/sync/partial`, {
+       const url = `${API_BASE_URL}/sync/partial`;
+       const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key, value })
        });
+       if (res.ok) {
+           console.log(`✅ Campo ${key} salvo com sucesso no servidor.`);
+       } else {
+           const err = await res.json();
+           console.error(`❌ Erro do servidor ao salvar ${key}:`, err);
+       }
     } catch (e) {
-       console.warn(`Erro ao salvar campo ${key}`, e);
+       console.error(`❌ Falha de rede ao salvar campo ${key}`, e);
     } finally {
        setTimeout(() => setIsSaving(false), 300);
     }
@@ -272,7 +283,7 @@ const App: React.FC = () => {
   const toggleTheme = () => {
     setData(prev => {
         const nextTheme = prev.theme === 'light' ? 'dark' : 'light';
-        setTimeout(() => saveField('theme', nextTheme), 0);
+        saveField('theme', nextTheme);
         return { ...prev, theme: nextTheme };
     });
   };
@@ -348,19 +359,12 @@ const App: React.FC = () => {
   const handleUpdateStock = (id: string, qty: number) => {
     setData(prev => {
         const nextProducts = prev.products.map(p => p.id === id ? { ...p, quantity: qty } : p);
-        // Move side effect out of next tick if possible or call it after
+        saveField('products', nextProducts);
         return { ...prev, products: nextProducts };
-    });
-    // Find product to get its info for logging if needed, or just send full list
-    setData(prev => {
-        saveField('products', prev.products);
-        return prev;
     });
   };
 
   const handleRecordSale = (studentId: string, items: {productId: string, qty: number}[], discount: number) => {
-    let studentToUpdate: Student | undefined;
-    
     setData(prev => {
         const saleSubtotal = items.reduce((acc, item) => {
           const prod = prev.products.find(p => p.id === item.productId);
@@ -384,6 +388,7 @@ const App: React.FC = () => {
           return p;
         });
         
+        let studentToUpdate: Student | undefined;
         const updatedStudents = prev.students.map(s => {
             if (s.id === studentId) {
                 studentToUpdate = { ...s, lastPurchase: newSale.date };
@@ -394,12 +399,9 @@ const App: React.FC = () => {
 
         const nextSales = [newSale, ...prev.sales];
         
-        // Schedule saves
-        setTimeout(() => {
-            saveField('sales', nextSales);
-            saveField('products', updatedProducts);
-            if(studentToUpdate) syncStudent(studentToUpdate);
-        }, 0);
+        saveField('sales', nextSales);
+        saveField('products', updatedProducts);
+        if(studentToUpdate) syncStudent(studentToUpdate);
 
         return {
           ...prev,

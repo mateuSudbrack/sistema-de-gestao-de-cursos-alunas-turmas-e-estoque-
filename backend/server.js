@@ -163,6 +163,7 @@ async function processPaymentApproval(payment) {
     // 2. Atualizar histórico e matricular
     let history = Array.isArray(student.history) ? student.history : (typeof student.history === 'string' ? JSON.parse(student.history) : []);
     
+    let isEnrolled = false;
     if (courseId) {
         const globalRes = await pool.query("SELECT data FROM app_settings WHERE key = 'GLOBAL_STATE'");
         if (globalRes.rows.length > 0) {
@@ -192,6 +193,7 @@ async function processPaymentApproval(payment) {
                         paid: parseFloat(payment.amount),
                         status: 'paid'
                     });
+                    isEnrolled = true;
                 }
             } else {
                 // Sem turma aberta, apenas registra pagamento
