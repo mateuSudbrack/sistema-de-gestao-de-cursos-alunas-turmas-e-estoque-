@@ -87,12 +87,12 @@ const Settings: React.FC<SettingsProps> = ({ config, currentTheme, logoUrl, onSa
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Aparência */}
-        <div className="bg-white dark:bg-dark-surface p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-dark-border space-y-6">
+        <div className="bg-white dark:bg-dark-surface p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-dark-border space-y-6 flex flex-col">
           <h3 className="font-bold text-gray-800 dark:text-dark-text flex items-center gap-2">
             <Zap size={18} className="text-amber-500" /> Identidade Visual
           </h3>
           
-          <div className="space-y-4">
+          <div className="space-y-4 flex-1">
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Logo do Sistema</label>
               <div className="flex items-center gap-4">
@@ -124,6 +124,13 @@ const Settings: React.FC<SettingsProps> = ({ config, currentTheme, logoUrl, onSa
               </div>
             </div>
           </div>
+
+          <button 
+            onClick={() => onShowToast('Configurações aplicadas e salvas!', 'success')}
+            className="w-full mt-4 bg-gray-800 dark:bg-slate-700 text-white py-3 rounded-xl font-bold hover:bg-gray-900 transition-all flex items-center justify-center gap-2"
+          >
+            <Save size={18}/> Salvar Configurações
+          </button>
         </div>
 
         {/* Status da Conexão */}

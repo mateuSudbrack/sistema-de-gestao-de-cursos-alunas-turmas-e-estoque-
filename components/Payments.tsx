@@ -14,9 +14,10 @@ interface PaymentsProps {
   onShowToast: (msg: string, type: ToastType) => void;
   preSelectedStudentId?: string | null;
   onClearPreSelection?: () => void;
+  onRefreshData?: () => void;
 }
 
-const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink, onDeleteLink, onSimulatePayment, onShowToast, preSelectedStudentId, onClearPreSelection }) => {
+const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink, onDeleteLink, onSimulatePayment, onShowToast, preSelectedStudentId, onClearPreSelection, onRefreshData }) => {
   const [activeTab, setActiveTab] = useState<'links' | 'history'>('links');
   const [showCreator, setShowCreator] = useState(false);
   const [newLink, setNewLink] = useState<Partial<PaymentLink>>({ methods: ['pix', 'credit'], active: true });
@@ -64,6 +65,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
               onShowToast('Pagamento aprovado e aluna matriculada!', 'success');
               loadPending();
               if (activeTab === 'history') loadAll();
+              onRefreshData?.(); // Refresh App state to show enrollment
           } else {
               onShowToast(data.error || 'Erro ao aprovar', 'error');
           }

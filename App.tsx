@@ -65,6 +65,54 @@ const App: React.FC = () => {
       window.location.href = '/';
   };
 
+  const refreshData = async () => {
+      console.log('🔄 Re-sincronizando dados...');
+      try {
+          const res = await fetch(`${API_BASE_URL}/sync`);
+          if (res.ok) {
+              const json = await res.json();
+              const dbStudents = json.students || [];
+              const globalData = json.global || {};
+
+              const processedStudents: Student[] = dbStudents.map((s: any) => ({
+                  id: s.id,
+                  name: s.name,
+                  phone: s.phone,
+                  email: s.email,
+                  cpf: s.cpf,
+                  photo: s.photo,
+                  type: (s.type as StudentType) || 'lead',
+                  status: (s.status as StudentStatus) || StudentStatus.INTERESTED,
+                  pipelineId: s.pipelineId || INITIAL_DATA.defaultPipelineId,
+                  stageId: s.stageId,
+                  interestedIn: s.interestedIn || [],
+                  history: s.history || [],
+                  lastContact: s.lastContact ? s.lastContact.split('T')[0] : '',
+                  nextFollowUp: s.nextFollowUp ? s.nextFollowUp.split('T')[0] : '',
+                  lastPurchase: s.lastPurchase ? s.lastPurchase.split('T')[0] : undefined,
+                  notes: s.notes || ''
+              }));
+
+              setData(prev => ({
+                  ...prev,
+                  students: processedStudents,
+                  courses: globalData.courses || prev.courses,
+                  classes: globalData.classes || prev.classes,
+                  products: globalData.products || prev.products,
+                  sales: globalData.sales || prev.sales,
+                  pipelines: globalData.pipelines || prev.pipelines,
+                  automations: globalData.automations || prev.automations,
+                  paymentLinks: globalData.paymentLinks || prev.paymentLinks,
+                  evolutionConfig: globalData.evolutionConfig || prev.evolutionConfig,
+                  logoUrl: globalData.logoUrl || prev.logoUrl,
+                  theme: globalData.theme || prev.theme
+              }));
+          }
+      } catch (e) {
+          console.error("Erro ao recarregar dados", e);
+      }
+  };
+
   const handleOpenPaymentForStudent = (studentId: string) => {
       setPaymentStudentId(studentId);
       setCurrentView('payments');
@@ -272,6 +320,25 @@ const App: React.FC = () => {
           }
       }
   };
+
+  useEffect(() => {
+    if (isLoaded && data.evolutionConfig.apiUrl && data.evolutionConfig.apiKey && data.evolutionConfig.instanceName) {
+        const verifyConnection = async () => {
+            try {
+                const instance = await evolutionService.fetchInstance(data.evolutionConfig);
+                const isConnected = instance && instance.instance.status === 'open';
+                if (isConnected !== data.evolutionConfig.isConnected) {
+                    const newConfig = { ...data.evolutionConfig, isConnected };
+                    setData(prev => ({ ...prev, evolutionConfig: newConfig }));
+                    saveField('evolutionConfig', newConfig);
+                }
+            } catch (e) {
+                console.error("Erro ao verificar conexão automática", e);
+            }
+        };
+        verifyConnection();
+    }
+  }, [isLoaded]);
 
   // Handlers
   const toggleTheme = () => {
@@ -906,6 +973,7 @@ const App: React.FC = () => {
                 onShowToast={addToast}
                 preSelectedStudentId={paymentStudentId}
                 onClearPreSelection={() => setPaymentStudentId(null)}
+                onRefreshData={refreshData}
             />
         )}
 
