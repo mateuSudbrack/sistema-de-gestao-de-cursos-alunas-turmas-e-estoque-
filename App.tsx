@@ -123,7 +123,8 @@ const App: React.FC = () => {
              paymentLinks: globalData.paymentLinks || prev.paymentLinks,
              evolutionConfig: globalData.evolutionConfig || prev.evolutionConfig,
              forms: loadedForms,
-             logoUrl: globalData.logoUrl || ''
+             logoUrl: globalData.logoUrl || '',
+             theme: globalData.theme || prev.theme
           }));
           console.log("✅ Dados sincronizados com sucesso!");
         } else {
@@ -191,42 +192,35 @@ const App: React.FC = () => {
   };
 
   const handleDeleteCourse = (id: string) => {
-    setData(prev => ({
-      ...prev,
-      courses: prev.courses.filter(c => c.id !== id),
-      classes: prev.classes.filter(cl => cl.courseId !== id)
-    }));
+    setData(prev => {
+      const nextCourses = prev.courses.filter(c => c.id !== id);
+      const nextClasses = prev.classes.filter(cl => cl.courseId !== id);
+      saveField('courses', nextCourses);
+      saveField('classes', nextClasses);
+      return {
+        ...prev,
+        courses: nextCourses,
+        classes: nextClasses
+      };
+    });
     addToast('Curso removido!', 'success');
   };
 
   const handleAddProduct = (product: Product) => {
-      setData(prev => ({
-          ...prev,
-          products: [...prev.products, product]
-      }));
+      setData(prev => {
+          const nextProducts = [...prev.products, product];
+          saveField('products', nextProducts);
+          return { ...prev, products: nextProducts };
+      });
   };
 
   const handleDeleteProduct = (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir este produto?')) {
-        setData(prev => ({
-        ...prev,
-        products: prev.products.filter(p => p.id !== id)
-        }));
-        // Forçar salvamento imediato
-        setTimeout(() => {
-            const globalState = {
-                courses: data.courses,
-                classes: data.classes,
-                products: data.products.filter(p => p.id !== id),
-                sales: data.sales,
-                pipelines: data.pipelines,
-                automations: data.automations,
-                paymentLinks: data.paymentLinks,
-                evolutionConfig: data.evolutionConfig,
-                forms: data.forms
-            };
-            saveGlobalState(globalState);
-        }, 100);
+        setData(prev => {
+            const nextProducts = prev.products.filter(p => p.id !== id);
+            saveField('products', nextProducts);
+            return { ...prev, products: nextProducts };
+        });
         addToast('Item removido do estoque!', 'success');
     }
   };
@@ -276,7 +270,11 @@ const App: React.FC = () => {
 
   // Handlers
   const toggleTheme = () => {
-    setData(prev => ({ ...prev, theme: prev.theme === 'light' ? 'dark' : 'light' }));
+    setData(prev => {
+        const nextTheme = prev.theme === 'light' ? 'dark' : 'light';
+        saveField('theme', nextTheme);
+        return { ...prev, theme: nextTheme };
+    });
   };
 
   const handleAddStudent = async (student: Student) => {
