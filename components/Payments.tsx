@@ -21,7 +21,20 @@ interface PaymentsProps {
 
 const Payments: React.FC<PaymentsProps> = ({ links, courses, students, sales, products, onAddLink, onDeleteLink, onSimulatePayment, onShowToast, preSelectedStudentId, onClearPreSelection, onRefreshData }) => {
   const [activeTab, setActiveTab] = useState<'links' | 'history'>('links');
-  // ... rest of state ...
+  const [isCreatorModalOpen, setIsCreatorModalOpen] = useState(false);
+  const [newLink, setNewLink] = useState<Partial<PaymentLink>>({ methods: ['pix', 'credit'], active: true });
+  const [studentSearch, setStudentSearch] = useState('');
+  
+  // Checkout State
+  const [activeCheckoutLink, setActiveCheckoutLink] = useState<PaymentLink | null>(null);
+  const [checkoutStep, setCheckoutStep] = useState<'method' | 'details' | 'payment' | 'success'>('method');
+  const [customerData, setCustomerData] = useState({ name: '', phone: '', email: '', cpf: '' });
+  const [cardData, setCardData] = useState({ number: '', expiry: '', cvc: '', holder: '' });
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit' | 'boleto' | 'manual'>('pix');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [pixData, setPixData] = useState<{ qrCode: string, key: string } | null>(null);
+  const [boletoData, setBoletoData] = useState<{ url: string, barcode: string } | null>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
   const [isPaidManual, setIsPaidManual] = useState(false);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [allPayments, setAllPayments] = useState<any[]>([]);
@@ -121,7 +134,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, sales, pr
         if (student) {
             setNewLink(prev => ({ ...prev, studentId: student.id }));
             setStudentSearch(student.name);
-            setShowCreator(true);
+            setIsCreatorModalOpen(true);
         }
         onClearPreSelection?.();
     }
@@ -173,7 +186,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, sales, pr
         clicks: 0
     };
     onAddLink(link);
-    setShowCreator(false);
+    setIsCreatorModalOpen(false);
     setNewLink({ methods: ['pix', 'credit'], active: true });
     setStudentSearch('');
     onShowToast('Link de pagamento criado!', 'success');
@@ -311,7 +324,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, sales, pr
                 </button>
             </div>
             <button 
-                onClick={() => setShowCreator(true)}
+                onClick={() => setIsCreatorModalOpen(true)}
                 className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-md transition-all whitespace-nowrap"
             >
                 <Plus size={20}/> Criar Link
@@ -471,7 +484,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, sales, pr
        )}
 
        {/* Creator Modal */}
-       {showCreator && (
+       {isCreatorModalOpen && (
            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                <div className="bg-white dark:bg-dark-surface rounded-2xl w-full max-w-md p-6 space-y-4 animate-in zoom-in-95">
                    <h3 className="font-bold text-lg text-gray-800 dark:text-dark-text">Novo Link de Pagamento</h3>
@@ -557,7 +570,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, sales, pr
                    
                    <div className="flex justify-end gap-2 pt-4">
                        <button onClick={() => {
-                           setShowCreator(false);
+                           setIsCreatorModalOpen(false);
                            setNewLink({ methods: ['pix', 'credit'], active: true });
                            setStudentSearch('');
                        }} className="px-4 py-2 text-gray-500 dark:text-gray-400">Cancelar</button>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { EvolutionConfig, Theme } from '../types';
-import { Settings as SettingsIcon, Upload, Moon, Sun, QrCode, RefreshCw, CheckCircle, Zap, Shield, Link } from 'lucide-react';
+import { Settings as SettingsIcon, Upload, Moon, Sun, QrCode, RefreshCw, CheckCircle, Zap, Shield, Link, Save } from 'lucide-react';
 import { evolutionService } from '../services/evolutionService';
 import { ToastType } from './Toast';
 
@@ -204,10 +204,10 @@ const Settings: React.FC<SettingsProps> = ({ config, currentTheme, logoUrl, onSa
               </button>
               <button 
                 onClick={handleCreateInstance}
-                disabled={isConnecting}
+                disabled={isProcessing}
                 className="flex-1 bg-primary-600 text-white py-3 rounded-xl font-bold hover:bg-primary-700 shadow-lg shadow-primary-200 dark:shadow-none transition-all disabled:opacity-50"
               >
-                {isConnecting ? 'Processando...' : 'Conectar/Criar'}
+                {isProcessing ? 'Processando...' : 'Conectar/Criar'}
               </button>
             </div>
           </div>

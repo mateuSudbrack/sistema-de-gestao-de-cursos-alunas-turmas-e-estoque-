@@ -22,6 +22,7 @@ const Messages: React.FC<MessagesProps> = ({ config, automations, students, onSa
   const [bulkMessage, setBulkMessage] = useState('');
   const [bulkFilter, setBulkFilter] = useState('');
   const [delay, setDelay] = useState(5); // Delay em segundos
+  const [loading, setLoading] = useState(false);
 
   // --- AUTOMATION STATES ---
   const [newRule, setNewRule] = useState<{name: string, trigger: AutomationTrigger, message: string}>({

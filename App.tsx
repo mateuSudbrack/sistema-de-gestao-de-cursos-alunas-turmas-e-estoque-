@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { INITIAL_DATA } from './constants';
-import { AppState, View, Student, CourseClass, StudentStatus, Course, PublicFormConfig, PipelineDefinition, EvolutionConfig, AutomationConfig, PaymentLink, AutomationTrigger, StudentType, Product } from './types';
+import { AppState, View, Student, CourseClass, StudentStatus, Course, PublicFormConfig, PipelineDefinition, EvolutionConfig, AutomationConfig, PaymentLink, AutomationTrigger, StudentType, Product, Theme } from './types';
 import Navigation from './components/Navigation';
 import Dashboard from './components/Dashboard';
 import Students from './components/Students';
