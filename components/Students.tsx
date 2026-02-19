@@ -11,6 +11,7 @@ interface StudentsProps {
   classes: CourseClass[];
   onAddStudent: (s: Student) => void;
   onImportStudents: (students: Student[]) => void;
+  onUndoImport: () => void;
   onUpdateStudent: (s: Student) => void;
   onDeleteStudent: (id: string) => void;
   onEnrollStudent: (studentId: string, classId: string, paidAmount: number, isPaid: boolean) => void;
@@ -18,12 +19,14 @@ interface StudentsProps {
   onGeneratePayment: (studentId: string) => void;
 }
 
-const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddStudent, onImportStudents, onUpdateStudent, onDeleteStudent, onEnrollStudent, onShowToast, onGeneratePayment }) => {
+const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddStudent, onImportStudents, onUndoImport, onUpdateStudent, onDeleteStudent, onEnrollStudent, onShowToast, onGeneratePayment }) => {
   const [activeTab, setActiveTab] = useState<StudentType>('student'); // 'lead' | 'student'
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalTab, setModalTab] = useState<'info' | 'history'>('info');
   const [editingStudent, setEditingStudent] = useState<Partial<Student> | null>(null);
+  
+  const [hasRecentImport, setHasRecentImport] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -34,6 +37,15 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
 
   // Filter
   const [showActiveOnly, setShowActiveOnly] = useState(false);
+
+  const [isMappingModalOpen, setIsMappingModalOpen] = useState(false);
+  const [importData, setImportData] = useState<any[]>([]);
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({
+    name: '',
+    phone: '',
+    email: ''
+  });
+  const [spreadsheetColumns, setSpreadsheetColumns] = useState<string[]>([]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -46,33 +58,62 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
         const wb = XLSX.read(bstr, { type: 'binary' });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws) as any[];
+        const rawData = XLSX.utils.sheet_to_json(ws) as any[];
 
-        const importedStudents: Student[] = data.map((row: any) => ({
-          id: v4(),
-          name: row.Nome || row.name || row.nome || 'Importado',
-          phone: String(row.Telefone || row.phone || row.whatsapp || '').replace(/\D/g, ''),
-          email: row.Email || row.email || '',
-          type: 'lead',
-          status: StudentStatus.INTERESTED,
-          interestedIn: [],
-          history: [],
-          lastContact: new Date().toISOString().split('T')[0],
-          nextFollowUp: '',
-          notes: 'Importado via planilha'
-        })).filter(s => s.phone.length >= 8);
-
-        if (importedStudents.length > 0) {
-          onImportStudents(importedStudents);
+        if (rawData.length > 0) {
+          const cols = Object.keys(rawData[0]);
+          setSpreadsheetColumns(cols);
+          setImportData(rawData);
+          
+          // Auto-map based on common names
+          const newMapping = { name: '', phone: '', email: '' };
+          cols.forEach(col => {
+            const low = col.toLowerCase();
+            if (low.includes('nome') || low === 'name') newMapping.name = col;
+            if (low.includes('tel') || low.includes('zap') || low.includes('phone') || low.includes('cel')) newMapping.phone = col;
+            if (low.includes('mail')) newMapping.email = col;
+          });
+          setColumnMapping(newMapping);
+          setIsMappingModalOpen(true);
         } else {
-          onShowToast('Nenhum contato válido encontrado na planilha.', 'error');
+          onShowToast('Planilha vazia.', 'error');
         }
       } catch (err) {
-        onShowToast('Erro ao ler planilha. Verifique o formato.', 'error');
+        onShowToast('Erro ao ler planilha.', 'error');
       }
     };
     reader.readAsBinaryString(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const confirmImport = () => {
+    if (!columnMapping.name || !columnMapping.phone) {
+      onShowToast('Mapeie pelo menos Nome e Telefone.', 'error');
+      return;
+    }
+
+    const importedStudents: Student[] = importData.map((row: any) => ({
+      id: v4(),
+      name: String(row[columnMapping.name] || 'Importado'),
+      phone: String(row[columnMapping.phone] || '').replace(/\D/g, ''),
+      email: columnMapping.email ? String(row[columnMapping.email] || '') : '',
+      type: 'lead',
+      status: StudentStatus.INTERESTED,
+      interestedIn: [],
+      history: [],
+      lastContact: new Date().toISOString().split('T')[0],
+      nextFollowUp: '',
+      notes: 'Importado via planilha'
+    })).filter(s => s.phone.length >= 8);
+
+    if (importedStudents.length > 0) {
+      onImportStudents(importedStudents);
+      setIsMappingModalOpen(false);
+      setImportData([]);
+      setHasRecentImport(true);
+    } else {
+      onShowToast('Nenhum contato válido encontrado com os campos mapeados.', 'error');
+    }
   };
 
   const filteredStudents = students.filter(s => {
@@ -208,6 +249,14 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
           >
             <FileSpreadsheet size={20} /> <span className="hidden sm:inline">Importar Planilha</span>
           </button>
+          {hasRecentImport && (
+            <button 
+              onClick={() => { onUndoImport(); setHasRecentImport(false); }}
+              className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-red-100 transition-all"
+            >
+              <Trash2 size={20} /> <span className="hidden sm:inline">Desfazer Importação</span>
+            </button>
+          )}
           <button 
             onClick={handleNewStudent}
             className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-md shadow-primary-200 active:scale-95 transition-all"
@@ -615,6 +664,96 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
                   <Save size={18} /> Salvar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de Mapeamento de Colunas */}
+      {isMappingModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-dark-surface rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-primary-600 p-4 text-white flex justify-between items-center">
+              <h3 className="font-bold text-lg flex items-center gap-2">
+                <FileSpreadsheet size={20}/> Mapear Colunas da Planilha
+              </h3>
+              <button onClick={() => setIsMappingModalOpen(false)} className="hover:bg-white/10 p-1 rounded-full"><X size={20}/></button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Coluna de Nome</label>
+                  <select 
+                    className="w-full p-2 rounded-lg border dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+                    value={columnMapping.name}
+                    onChange={e => setColumnMapping({...columnMapping, name: e.target.value})}
+                  >
+                    <option value="">Selecionar...</option>
+                    {spreadsheetColumns.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Coluna de WhatsApp</label>
+                  <select 
+                    className="w-full p-2 rounded-lg border dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+                    value={columnMapping.phone}
+                    onChange={e => setColumnMapping({...columnMapping, phone: e.target.value})}
+                  >
+                    <option value="">Selecionar...</option>
+                    {spreadsheetColumns.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Coluna de E-mail</label>
+                  <select 
+                    className="w-full p-2 rounded-lg border dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+                    value={columnMapping.email}
+                    onChange={e => setColumnMapping({...columnMapping, email: e.target.value})}
+                  >
+                    <option value="">Selecionar...</option>
+                    {spreadsheetColumns.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Pré-visualização (Primeiros 5 registros)</h4>
+                <div className="border rounded-lg overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-50 dark:bg-slate-800 text-gray-500">
+                      <tr>
+                        <th className="p-2 border-b">Nome</th>
+                        <th className="p-2 border-b">WhatsApp</th>
+                        <th className="p-2 border-b">E-mail</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importData.slice(0, 5).map((row, i) => (
+                        <tr key={i} className="dark:border-slate-700">
+                          <td className="p-2 border-b dark:text-gray-300">{String(row[columnMapping.name] || '-')}</td>
+                          <td className="p-2 border-b dark:text-gray-300">{String(row[columnMapping.phone] || '-')}</td>
+                          <td className="p-2 border-b dark:text-gray-300">{String(row[columnMapping.email] || '-')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t bg-gray-50 dark:bg-slate-800/50 flex justify-end gap-3">
+              <button 
+                onClick={() => setIsMappingModalOpen(false)}
+                className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 rounded-lg"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={confirmImport}
+                className="px-6 py-2 bg-primary-600 text-white rounded-lg font-bold hover:bg-primary-700 transition-colors"
+              >
+                Confirmar Importação ({importData.length})
+              </button>
             </div>
           </div>
         </div>

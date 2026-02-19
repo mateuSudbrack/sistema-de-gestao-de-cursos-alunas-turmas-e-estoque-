@@ -314,9 +314,13 @@ const App: React.FC = () => {
     addToast('Contato salvo!', 'success');
   };
 
+  const [lastImportIds, setLastImportIds] = useState<string[]>([]);
+
   const handleImportStudents = async (newStudents: Student[]) => {
+      const ids = newStudents.map(s => s.id);
+      setLastImportIds(ids);
+
       setData(prev => {
-          // Sync each student with the backend
           for (const s of newStudents) {
               syncStudent(s);
           }
@@ -326,6 +330,33 @@ const App: React.FC = () => {
           };
       });
       addToast(`${newStudents.length} contatos importados!`, 'success');
+  };
+
+  const undoImport = async () => {
+      if (lastImportIds.length === 0) {
+          addToast('Nenhuma importação para desfazer.', 'info');
+          return;
+      }
+
+      if (!window.confirm(`Deseja remover os últimos ${lastImportIds.length} contatos importados?`)) return;
+
+      const idsToRemove = [...lastImportIds];
+      
+      for (const id of idsToRemove) {
+          try {
+              await fetch(`${API_BASE_URL}/students/${id}`, { method: 'DELETE' });
+          } catch (e) {
+              console.error("Erro ao deletar durante desfazer", e);
+          }
+      }
+
+      setData(prev => ({
+          ...prev,
+          students: prev.students.filter(s => !idsToRemove.includes(s.id))
+      }));
+
+      setLastImportIds([]);
+      addToast('Importação desfeita com sucesso.', 'success');
   };
 
   const handleUpdateStudent = async (student: Student) => {
@@ -800,6 +831,7 @@ const App: React.FC = () => {
             classes={data.classes}
             onAddStudent={handleAddStudent}
             onImportStudents={handleImportStudents}
+            onUndoImport={undoImport}
             onUpdateStudent={handleUpdateStudent}
             onDeleteStudent={deleteStudent}
             onEnrollStudent={handleEnrollStudent}
