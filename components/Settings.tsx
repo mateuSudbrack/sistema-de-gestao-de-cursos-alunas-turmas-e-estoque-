@@ -15,9 +15,11 @@ interface SettingsProps {
 }
 
 const Settings: React.FC<SettingsProps> = ({ config, currentTheme, logoUrl, onSaveConfig, onUpdateTheme, onUpdateLogo, onShowToast }) => {
-  const [localConfig, setLocalConfig] = useState<EvolutionConfig>(config);
+  const [localConfig, setLocalConfig] = useState<EvolutionConfig>(config || { apiUrl: '', apiKey: '', instanceName: '', isConnected: false });
   const [isProcessing, setIsProcessing] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
+
+  if (!config) return <div className="p-10 text-center">Carregando configurações...</div>;
 
   const handleSaveConfig = () => {
     onSaveConfig(localConfig);

@@ -28,25 +28,25 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, sales, pr
 
   // Memoized unified transactions
   const unifiedTransactions = React.useMemo(() => {
-      const coursePayments = allPayments.map(p => {
+      const coursePayments = (allPayments || []).map(p => {
           const customer = typeof p.customerData === 'string' ? JSON.parse(p.customerData) : p.customerData;
           return {
               id: p.id,
               date: p.createdAt,
               customerName: customer?.name || 'N/A',
               customerPhone: customer?.phone || '',
-              description: courses.find(c => c.id === p.courseId)?.name || 'Matrícula de Curso',
+              description: (courses || []).find(c => c.id === p.courseId)?.name || 'Matrícula de Curso',
               method: p.method,
-              amount: parseFloat(p.amount),
+              amount: parseFloat(p.amount) || 0,
               status: p.status,
               type: 'course'
           };
       });
 
       const productSales = (sales || []).map(s => {
-          const student = students.find(st => st.id === s.studentId);
+          const student = (students || []).find(st => st.id === s.studentId);
           const itemsDesc = (s.items || []).map((i: any) => {
-              const p = products.find(prod => prod.id === i.productId);
+              const p = (products || []).find(prod => prod.id === i.productId);
               return `${i.qty}x ${p?.name || 'Produto'}`;
           }).join(', ');
 
@@ -57,7 +57,7 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, sales, pr
               customerPhone: student?.phone || '',
               description: itemsDesc,
               method: 'Dinheiro/Cartão (Local)',
-              amount: s.total,
+              amount: s.total || 0,
               status: 'paid',
               type: 'product'
           };

@@ -159,6 +159,7 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, cu
               );
             } else {
               const Icon = item.icon;
+              if (!Icon) return null;
               const isActive = currentView === item.id;
               return (
                 <button
