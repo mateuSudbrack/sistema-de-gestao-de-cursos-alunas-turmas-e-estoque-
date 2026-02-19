@@ -170,7 +170,7 @@ async function processPaymentApproval(payment) {
             const classes = globalData.classes || [];
             // Encontrar turma aberta
             const openClass = classes
-                .filter(c => c.courseId === courseId && c.status === 'open')
+                .filter(c => c.courseId === courseId && c.status === 'open' && c.enrolledStudentIds.length < c.maxStudents)
                 .sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())[0];
             
             if (openClass) {

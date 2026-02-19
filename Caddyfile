@@ -1,6 +1,6 @@
 :80
 
-root * /home/ubuntu/labs/sistema-de-gestao-de-cursos-alunas-turmas-e-estoque-/dist
+root * /home/ubuntu/labs/sistematessste/dist
 
 @api_paths {
     path /sync

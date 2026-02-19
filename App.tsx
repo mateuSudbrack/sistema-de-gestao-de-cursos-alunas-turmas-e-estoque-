@@ -302,21 +302,40 @@ const App: React.FC = () => {
   };
 
   const handleAddStudent = async (student: Student) => {
-    const s = { ...student };
-    if (!s.pipelineId) s.pipelineId = data.defaultPipelineId;
-    
-    setData(prev => ({ ...prev, students: [s, ...prev.students] }));
+    setData(prev => {
+        const s = { ...student };
+        if (!s.pipelineId) s.pipelineId = prev.defaultPipelineId;
+        
+        syncStudent(s);
+        triggerAutomation('lead_created', s);
+        
+        return { ...prev, students: [s, ...prev.students] };
+    });
     addToast('Contato salvo!', 'success');
-    triggerAutomation('lead_created', s);
-    syncStudent(s);
+  };
+
+  const handleImportStudents = async (newStudents: Student[]) => {
+      setData(prev => {
+          // Sync each student with the backend
+          for (const s of newStudents) {
+              syncStudent(s);
+          }
+          return {
+              ...prev,
+              students: [...newStudents, ...prev.students]
+          };
+      });
+      addToast(`${newStudents.length} contatos importados!`, 'success');
   };
 
   const handleUpdateStudent = async (student: Student) => {
-    setData(prev => ({
-      ...prev,
-      students: prev.students.map(s => s.id === student.id ? student : s)
-    }));
-    syncStudent(student);
+    setData(prev => {
+        syncStudent(student);
+        return {
+            ...prev,
+            students: prev.students.map(s => s.id === student.id ? student : s)
+        };
+    });
   };
 
   const handleUpdateStock = (id: string, qty: number) => {
@@ -429,56 +448,61 @@ const App: React.FC = () => {
   };
 
   const handleEnrollStudent = (studentId: string, classId: string, paidAmount: number, isPaid: boolean) => {
-    const updatedClasses = data.classes.map(c => {
-      if (c.id === classId && !c.enrolledStudentIds.includes(studentId)) {
-        return { ...c, enrolledStudentIds: [...c.enrolledStudentIds, studentId] };
+    setData(prev => {
+      const targetClass = prev.classes.find(c => c.id === classId);
+      if (!targetClass) return prev;
+
+      const updatedClasses = prev.classes.map(c => {
+        if (c.id === classId && !c.enrolledStudentIds.includes(studentId)) {
+          return { ...c, enrolledStudentIds: [...c.enrolledStudentIds, studentId] };
+        }
+        return c;
+      });
+
+      let updatedStudentRef: Student | null = null;
+      const updatedStudents = prev.students.map(s => {
+        if (s.id === studentId) {
+          const newHistoryItem = {
+              courseId: targetClass.courseId,
+              classId: targetClass.id,
+              date: new Date().toISOString().split('T')[0],
+              paid: paidAmount,
+              status: isPaid ? 'paid' : 'pending' as 'paid'|'pending'
+          };
+
+          const updatedStudent = {
+            ...s,
+            type: isPaid ? 'student' as const : s.type, 
+            status: StudentStatus.ACTIVE,
+            interestedIn: s.interestedIn.filter(id => id !== targetClass.courseId),
+            history: [...s.history, newHistoryItem]
+          };
+          updatedStudentRef = updatedStudent;
+          return updatedStudent;
+        }
+        return s;
+      });
+
+      if(updatedStudentRef) {
+          syncStudent(updatedStudentRef);
+          triggerAutomation('enrollment_created', updatedStudentRef);
+          if (isPaid) triggerAutomation('payment_confirmed', updatedStudentRef);
       }
-      return c;
+
+      return { ...prev, classes: updatedClasses, students: updatedStudents };
     });
-
-    const targetClass = data.classes.find(c => c.id === classId);
-    let updatedStudentRef: Student | null = null;
-
-    const updatedStudents = data.students.map(s => {
-      if (s.id === studentId) {
-        const newHistoryItem = targetClass ? {
-            courseId: targetClass.courseId,
-            classId: targetClass.id,
-            date: new Date().toISOString().split('T')[0],
-            paid: paidAmount,
-            status: isPaid ? 'paid' : 'pending' as 'paid'|'pending'
-        } : null;
-
-        const updatedStudent = {
-          ...s,
-          type: isPaid ? 'student' as const : s.type, 
-          status: StudentStatus.ACTIVE,
-          interestedIn: targetClass ? s.interestedIn.filter(id => id !== targetClass.courseId) : s.interestedIn,
-          history: newHistoryItem ? [...s.history, newHistoryItem] : s.history
-        };
-        updatedStudentRef = updatedStudent;
-        return updatedStudent;
-      }
-      return s;
-    });
-
-    setData(prev => ({ ...prev, classes: updatedClasses, students: updatedStudents }));
-    
-    if(updatedStudentRef) {
-        handleUpdateStudent(updatedStudentRef);
-        triggerAutomation('enrollment_created', updatedStudentRef);
-        if (isPaid) triggerAutomation('payment_confirmed', updatedStudentRef);
-    }
   };
 
   const handleUnenrollStudent = (studentId: string, classId: string) => {
-      const updatedClasses = data.classes.map(c => {
-          if (c.id === classId) {
-              return { ...c, enrolledStudentIds: c.enrolledStudentIds.filter(id => id !== studentId) };
-          }
-          return c;
-      });
-      setData(prev => ({ ...prev, classes: updatedClasses }));
+      setData(prev => ({
+          ...prev,
+          classes: prev.classes.map(c => {
+              if (c.id === classId) {
+                  return { ...c, enrolledStudentIds: c.enrolledStudentIds.filter(id => id !== studentId) };
+              }
+              return c;
+          })
+      }));
       addToast('Aluna removida da turma.', 'info');
   };
 
@@ -507,72 +531,78 @@ const App: React.FC = () => {
   };
 
   const handleGeneratePaymentLink = (courseId: string) => {
-      const course = data.courses.find(c => c.id === courseId);
-      if(!course) return;
+      setData(prev => {
+          const course = prev.courses.find(c => c.id === courseId);
+          if(!course) return prev;
 
-      const link: PaymentLink = {
-          id: v4(),
-          title: course.name,
-          description: `Matrícula para ${course.name}`,
-          amount: course.price,
-          courseId: course.id,
-          methods: ['pix', 'credit'],
-          active: true,
-          clicks: 0
-      };
-      handleAddLink(link);
-      addToast('Link gerado e copiado!', 'success');
-      setCurrentView('payments');
+          const link: PaymentLink = {
+              id: v4(),
+              title: course.name,
+              description: `Matrícula para ${course.name}`,
+              amount: course.price,
+              courseId: course.id,
+              methods: ['pix', 'credit'],
+              active: true,
+              clicks: 0
+          };
+          
+          setTimeout(() => {
+              setCurrentView('payments');
+              addToast('Link gerado e copiado!', 'success');
+          }, 0);
+
+          return { ...prev, paymentLinks: [...prev.paymentLinks, link] };
+      });
   };
 
   const handleSimulatePayment = (linkId: string, customerName: string, customerPhone: string) => {
-      const link = data.paymentLinks.find(l => l.id === linkId);
-      if (!link) return;
-
-      let student = data.students.find(s => s.phone.replace(/\D/g,'') === customerPhone.replace(/\D/g,''));
-      let studentId = student?.id;
-      let isNew = false;
-
-      if (!student) {
-          isNew = true;
-          student = {
-              id: v4(),
-              name: customerName,
-              phone: customerPhone,
-              type: 'lead' as StudentType,
-              status: StudentStatus.INTERESTED,
-              interestedIn: link.courseId ? [link.courseId] : [],
-              history: [],
-              lastContact: new Date().toISOString().split('T')[0],
-              nextFollowUp: '',
-              notes: 'Criado via Link de Pagamento'
-          } as Student;
-          studentId = student.id;
-      }
-
-      let newHistoryItem = null;
-      let targetClassId = '';
-
-      if (link.courseId) {
-          const openClass = data.classes
-             .filter(c => c.courseId === link.courseId && c.status === 'open' && c.enrolledStudentIds.length < c.maxStudents)
-             .sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())[0];
-          
-          if (openClass) {
-              targetClassId = openClass.id;
-              newHistoryItem = {
-                  courseId: link.courseId,
-                  classId: openClass.id,
-                  date: new Date().toISOString().split('T')[0],
-                  paid: link.amount,
-                  status: 'paid' as const
-              };
-          }
-      }
-
-      let updatedStudentRef: Student | null = null;
-      
       setData(prev => {
+          const link = prev.paymentLinks.find(l => l.id === linkId);
+          if (!link) return prev;
+
+          let student = prev.students.find(s => s.phone.replace(/\D/g,'') === customerPhone.replace(/\D/g,''));
+          let studentId = student?.id;
+          let isNew = false;
+
+          if (!student) {
+              isNew = true;
+              student = {
+                  id: v4(),
+                  name: customerName,
+                  phone: customerPhone,
+                  type: 'lead' as StudentType,
+                  status: StudentStatus.INTERESTED,
+                  pipelineId: prev.defaultPipelineId,
+                  interestedIn: link.courseId ? [link.courseId] : [],
+                  history: [],
+                  lastContact: new Date().toISOString().split('T')[0],
+                  nextFollowUp: '',
+                  notes: 'Criado via Link de Pagamento'
+              } as Student;
+              studentId = student.id;
+          }
+
+          let newHistoryItem = null;
+          let targetClassId = '';
+
+          if (link.courseId) {
+              const openClass = prev.classes
+                 .filter(c => c.courseId === link.courseId && c.status === 'open' && c.enrolledStudentIds.length < c.maxStudents)
+                 .sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())[0];
+              
+              if (openClass) {
+                  targetClassId = openClass.id;
+                  newHistoryItem = {
+                      courseId: link.courseId,
+                      classId: openClass.id,
+                      date: new Date().toISOString().split('T')[0],
+                      paid: link.amount,
+                      status: 'paid' as const
+                  };
+              }
+          }
+
+          let updatedStudentRef: Student | null = null;
           let updatedStudents = [...prev.students];
           
           if (isNew && student) {
@@ -603,20 +633,20 @@ const App: React.FC = () => {
               });
           }
 
+          if (updatedStudentRef) {
+              syncStudent(updatedStudentRef); 
+              triggerAutomation('payment_confirmed', updatedStudentRef);
+              if (targetClassId) triggerAutomation('enrollment_created', updatedStudentRef);
+          }
+
+          setTimeout(() => addToast('Pagamento confirmado e matrícula realizada!', 'success'), 0);
+
           return {
               ...prev,
               students: updatedStudents,
               classes: updatedClasses
           };
       });
-
-      addToast('Pagamento confirmado e matrícula realizada!', 'success');
-      
-      if (updatedStudentRef) {
-          handleUpdateStudent(updatedStudentRef); 
-          triggerAutomation('payment_confirmed', updatedStudentRef);
-          if (targetClassId) triggerAutomation('enrollment_created', updatedStudentRef);
-      }
   };
 
   // --- PUBLIC FORM VIEW ---
@@ -769,6 +799,7 @@ const App: React.FC = () => {
             courses={data.courses}
             classes={data.classes}
             onAddStudent={handleAddStudent}
+            onImportStudents={handleImportStudents}
             onUpdateStudent={handleUpdateStudent}
             onDeleteStudent={deleteStudent}
             onEnrollStudent={handleEnrollStudent}

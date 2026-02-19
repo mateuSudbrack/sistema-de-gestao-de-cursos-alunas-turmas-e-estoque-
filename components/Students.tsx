@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Student, StudentStatus, Course, CourseClass, StudentType } from '../types';
-import { Search, Plus, Phone, Edit2, MessageCircle, Sparkles, X, Save, Calendar, DollarSign, Trash2, CheckCircle, ShoppingBag, Trophy, User, Crown, Filter } from 'lucide-react';
+import { Search, Plus, Phone, Edit2, MessageCircle, Sparkles, X, Save, Calendar, DollarSign, Trash2, CheckCircle, ShoppingBag, Trophy, User, Crown, Filter, FileSpreadsheet, Download } from 'lucide-react';
 import { ToastType } from './Toast';
 import { v4 } from 'uuid';
+import * as XLSX from 'xlsx';
 
 interface StudentsProps {
   students: Student[];
   courses: Course[];
   classes: CourseClass[];
   onAddStudent: (s: Student) => void;
+  onImportStudents: (students: Student[]) => void;
   onUpdateStudent: (s: Student) => void;
   onDeleteStudent: (id: string) => void;
   onEnrollStudent: (studentId: string, classId: string, paidAmount: number, isPaid: boolean) => void;
@@ -16,13 +18,15 @@ interface StudentsProps {
   onGeneratePayment: (studentId: string) => void;
 }
 
-const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddStudent, onUpdateStudent, onDeleteStudent, onEnrollStudent, onShowToast, onGeneratePayment }) => {
+const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddStudent, onImportStudents, onUpdateStudent, onDeleteStudent, onEnrollStudent, onShowToast, onGeneratePayment }) => {
   const [activeTab, setActiveTab] = useState<StudentType>('student'); // 'lead' | 'student'
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalTab, setModalTab] = useState<'info' | 'history'>('info');
   const [editingStudent, setEditingStudent] = useState<Partial<Student> | null>(null);
   
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Enroll States
   const [selectedClassId, setSelectedClassId] = useState('');
   const [negotiatedPrice, setNegotiatedPrice] = useState<string>('');
@@ -30,6 +34,46 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
 
   // Filter
   const [showActiveOnly, setShowActiveOnly] = useState(false);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws) as any[];
+
+        const importedStudents: Student[] = data.map((row: any) => ({
+          id: v4(),
+          name: row.Nome || row.name || row.nome || 'Importado',
+          phone: String(row.Telefone || row.phone || row.whatsapp || '').replace(/\D/g, ''),
+          email: row.Email || row.email || '',
+          type: 'lead',
+          status: StudentStatus.INTERESTED,
+          interestedIn: [],
+          history: [],
+          lastContact: new Date().toISOString().split('T')[0],
+          nextFollowUp: '',
+          notes: 'Importado via planilha'
+        })).filter(s => s.phone.length >= 8);
+
+        if (importedStudents.length > 0) {
+          onImportStudents(importedStudents);
+        } else {
+          onShowToast('Nenhum contato válido encontrado na planilha.', 'error');
+        }
+      } catch (err) {
+        onShowToast('Erro ao ler planilha. Verifique o formato.', 'error');
+      }
+    };
+    reader.readAsBinaryString(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const filteredStudents = students.filter(s => {
     // Type Filter (Lead vs Student)
@@ -151,6 +195,19 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
            <p className="text-sm text-gray-500 dark:text-dark-textMuted">Gerencie leads e alunas matriculadas.</p>
         </div>
         <div className="flex gap-2">
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileUpload} 
+            accept=".xlsx, .xls, .csv" 
+            className="hidden" 
+          />
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-300 px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-slate-700 transition-all"
+          >
+            <FileSpreadsheet size={20} /> <span className="hidden sm:inline">Importar Planilha</span>
+          </button>
           <button 
             onClick={handleNewStudent}
             className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-md shadow-primary-200 active:scale-95 transition-all"
@@ -433,7 +490,7 @@ const Students: React.FC<StudentsProps> = ({ students, courses, classes, onAddSt
                             >
                                <option value="">Selecione uma turma...</option>
                                {classes
-                                 .filter(c => c.status === 'open' && editingStudent.id && !c.enrolledStudentIds.includes(editingStudent.id))
+                                 .filter(c => c.status === 'open' && editingStudent.id && !c.enrolledStudentIds.includes(editingStudent.id) && c.enrolledStudentIds.length < c.maxStudents)
                                  .map(c => {
                                     const courseName = courses.find(course => course.id === c.courseId)?.name;
                                     return (
