@@ -152,10 +152,9 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
 
      // Validation Logic
      if (paymentMethod === 'manual') {
-         if (!customerData.name) return onShowToast("Nome é obrigatório para pagamento manual.", 'error');
-         if (!isPaidManual && !proofFile) {
-             // Se não pagou ainda, comprovante é opcional, mas se quiser enviar, deve selecionar.
-             // Aqui deixamos passar sem arquivo (status pendente), conforme pedido anterior.
+         if (!customerData.name) return onShowToast("Nome é obrigatório.", 'error');
+         if (isPaidManual && !proofFile) {
+             return onShowToast("Anexe o comprovante para confirmar o recebimento.", 'error');
          }
      } else {
          // Strict validation for Safe2Pay
@@ -565,19 +564,23 @@ const Payments: React.FC<PaymentsProps> = ({ links, courses, students, onAddLink
                                               id="paidManual"
                                               className="w-5 h-5 text-primary-600 rounded"
                                               checked={isPaidManual}
-                                              onChange={e => setIsPaidManual(e.target.checked)}
+                                              onChange={e => {
+                                                  setIsPaidManual(e.target.checked);
+                                                  if (!e.target.checked) setProofFile(null);
+                                              }}
                                            />
                                            <label htmlFor="paidManual" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
                                                Pagamento já realizado / Recebido em mãos
                                            </label>
                                        </div>
 
-                                       {!isPaidManual && (
+                                       {isPaidManual && (
                                            <div className="animate-in fade-in">
-                                               <label className="block text-xs font-bold text-gray-500 mb-2 uppercase">Anexar Comprovante (Opcional)</label>
+                                               <label className="block text-xs font-bold text-gray-500 mb-2 uppercase">Anexar Comprovante *</label>
                                                <input 
                                                   type="file" 
                                                   accept="image/*,.pdf"
+                                                  required
                                                   className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
                                                   onChange={e => setProofFile(e.target.files ? e.target.files[0] : null)}
                                                />
